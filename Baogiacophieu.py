@@ -9,15 +9,9 @@ from datetime import datetime, timedelta
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
 CHECK_INTERVAL = 60
-WATCH_LIST = ["ACV", "FPT"]
+WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]  # Đã thêm các mã mới
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
-
-# GIÁ ĐÓNG CỬA DỰ PHÒNG
-last_close_price = {
-    "ACV": {"price": 27600, "change": 150, "change_pct": 0.55, "volume": 12500000},
-    "FPT": {"price": 98200, "change": -800, "change_pct": -0.81, "volume": 8700000}
-}
 
 # ==========================================
 # 🤖 GỬI TIN NHẮN TELEGRAM
@@ -77,12 +71,12 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU CỔ PHIẾU
+# 📊 LẤY DỮ LIỆU CỔ PHIẾU — LẤY GIÁ THỜI GIAN THỰC
 # ==========================================
 def get_stock_data(symbol):
-    print(f"🔄 Đang lấy dữ liệu {symbol}...")
+    print(f"🔄 Đang lấy giá thực tế {symbol}...")
     
-    # Thử API SSI
+    # Nguồn 1: API SSI
     try:
         url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -94,17 +88,12 @@ def get_stock_data(symbol):
                 if price > 0:
                     change = float(data.get('change', 0))
                     change_pct = float(data.get('changePercent', 0))
-                    volume = data.get('totalTradingVolume', 0)
-                    last_close_price[symbol] = {
-                        "price": price, "change": change,
-                        "change_pct": change_pct, "volume": volume
-                    }
-                    print(f"   ✅ Lấy thành công: {price:,.0f} VNĐ")
-                    return last_close_price[symbol]
+                    print(f"   ✅ SSI: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+                    return {"price": price, "change": change, "change_pct": change_pct}
     except Exception as e:
         print(f"   ⚠️ API SSI lỗi: {e}")
     
-    # Thử API DNSE
+    # Nguồn 2: API DNSE
     try:
         url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -116,19 +105,38 @@ def get_stock_data(symbol):
                 if price > 0:
                     change = float(data.get('change', 0))
                     change_pct = float(data.get('percentChange', 0))
-                    volume = data.get('volume', 0)
-                    last_close_price[symbol] = {
-                        "price": price, "change": change,
-                        "change_pct": change_pct, "volume": volume
-                    }
-                    print(f"   ✅ Lấy thành công: {price:,.0f} VNĐ")
-                    return last_close_price[symbol]
+                    print(f"   ✅ DNSE: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+                    return {"price": price, "change": change, "change_pct": change_pct}
     except Exception as e:
         print(f"   ⚠️ API DNSE lỗi: {e}")
     
-    # TẤT CẢ API LỖI → DÙNG GIÁ ĐÓNG CỬA
-    print(f"   🔒 Dùng giá đóng cửa: {last_close_price[symbol]['price']:,.0f} VNĐ")
-    return last_close_price[symbol]
+    # Nguồn 3: CafeF API
+    try:
+        url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get('Symbol') == symbol:
+                price = float(data.get('LastPrice', 0))
+                if price > 0:
+                    change = float(data.get('Change', 0))
+                    change_pct = float(data.get('ChangePercent', 0))
+                    print(f"   ✅ CafeF: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+                    return {"price": price, "change": change, "change_pct": change_pct}
+    except Exception as e:
+        print(f"   ⚠️ API CafeF lỗi: {e}")
+    
+    # Nếu tất cả API lỗi → trả về giá mặc định (dựa trên ảnh mới nhất bạn cung cấp)
+    default_prices = {
+        "ACV": {"price": 41500, "change": 600, "change_pct": 1.47},
+        "FPT": {"price": 72000, "change": 2200, "change_pct": 3.15},
+        "VCB": {"price": 59100, "change": 1300, "change_pct": 2.25},
+        "GAS": {"price": 83500, "change": 0, "change_pct": 0.00},
+        "GMD": {"price": 77400, "change": 400, "change_pct": 0.52}
+    }
+    print(f"   🔒 Dùng giá tham khảo: {default_prices[symbol]['price']:,.0f} VNĐ")
+    return default_prices[symbol]
 
 # ==========================================
 # 📈 TÍNH CHỈ SỐ KỸ THUẬT
@@ -180,7 +188,7 @@ def calculate_indicators(symbol, price_data):
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — CHẠY 24/7 — ĐỊNH DẠNG ĐÚNG NHƯ ẢNH
+# 🚀 BOT CHÍNH — CHẠY 24/7
 # ==========================================
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
@@ -196,8 +204,8 @@ Cập nhật: Mỗi 1 phút 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
 ☁️ Chạy trên đám mây — TẮT MÁY VẪN HOẠT ĐỘNG
-🔒 Đóng cửa → Gửi GIÁ ĐÓNG CỬA HIỆN TẠI
-🟢 Mở cửa → Gửi giá thời gian thực
+🟢 Lấy giá thời gian thực từ SSI/DNSE/CafeF
+🔒 Khi API lỗi → dùng giá tham khảo mới nhất
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
@@ -223,17 +231,14 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         
         print(f"\n🔄 [{now.strftime('%H:%M:%S')}] Tạo báo cáo mới... | {status_text}")
         
-        # Tạo báo cáo ĐÚNG ĐỊNH DẠNG VÀ EMOJI NHƯ ẢNH
         full_message = ""
         
         for symbol in WATCH_LIST:
             data = get_stock_data(symbol)
             ind = calculate_indicators(symbol, data)
             
-            # Định dạng thay đổi % có dấu + hoặc -
             change_pct_str = f"{data['change_pct']:+.2f}%"
             
-            # Báo cáo từng cổ phiếu — ĐÚNG TỪNG EMOJI VÀ DÒNG NHƯ ẢNH
             report = f"""
 ——————————————————————
 📊 {symbol} – Giá: {data['price']:,.0f} VND | Thay đổi: {change_pct_str}
