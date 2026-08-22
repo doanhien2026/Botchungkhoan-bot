@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # ==========================================
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
-CHECK_INTERVAL = 60
+CHECK_INTERVAL = 3600
 WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
