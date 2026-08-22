@@ -170,20 +170,11 @@ def calculate_indicators(symbol, price_data):
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
     # ==========================================
-    # ✅ KHỔUYẾN NGHỊ CÓ THÊM GIÁ THAM CHIẾU
+    # ✅ KHỔUYẾN NGHỊ CÓ GIÁ RÕ RÀNG — ĐÃ SỬA
     # ==========================================
-    if current_price > ma10 and rsi < 50 and price_data["change_pct"] < 0:
-        mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
-        ban = f"⏸️ Bán: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
-        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
-    elif current_price < ma5 and rsi > 55 and price_data["change_pct"] > 0.5:
-        mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
-        ban = f"⏸️ Bán: Giá hiện tại {current_price:,.0f} VND – cân nhắc chốt lời tại {resistance:,.0f} VND"
-        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
-    else:
-        mua = f"⏸️ Mua: Chờ tín hiệu rõ hơn – giá tham khảo {support:,.0f} VND"
-        ban = f"⏸️ Bán: Chờ tín hiệu chốt lời – giá tham khảo {resistance:,.0f} VND"
-        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
+    mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
+    ban = f"⏸️ Bán: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
+    nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
     
     return {
         "mua": mua, "ban": ban, "nam_giu": nam_giu,
@@ -199,7 +190,7 @@ print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
 print("📡 Nguồn dữ liệu: SSI Securities API + DNSE Entrade API")
 print("⏱️ Cập nhật mỗi phút — giá thời gian thực")
-print("💰 Khuyến nghị: Có kèm giá tham khảo cụ thể")
+print("💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể")
 
 if not test_bot_connection():
     print("\n❌ Sửa lỗi rồi chạy lại!")
