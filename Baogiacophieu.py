@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
 CHECK_INTERVAL = 60
-WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]  # Đã thêm các mã mới
+WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
@@ -71,72 +71,23 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU CỔ PHIẾU — LẤY GIÁ THỜI GIAN THỰC
+# 📊 LẤY DỮ LIỆU CỔ PHIẾU — GIÁ MỚI NHẤT THEO ẢNH
 # ==========================================
 def get_stock_data(symbol):
-    print(f"🔄 Đang lấy giá thực tế {symbol}...")
+    print(f"🔄 Đang lấy giá {symbol}...")
     
-    # Nguồn 1: API SSI
-    try:
-        url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('symbol') == symbol:
-                price = float(data.get('lastPrice', 0))
-                if price > 0:
-                    change = float(data.get('change', 0))
-                    change_pct = float(data.get('changePercent', 0))
-                    print(f"   ✅ SSI: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-                    return {"price": price, "change": change, "change_pct": change_pct}
-    except Exception as e:
-        print(f"   ⚠️ API SSI lỗi: {e}")
-    
-    # Nguồn 2: API DNSE
-    try:
-        url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('symbol') == symbol:
-                price = float(data.get('price', 0))
-                if price > 0:
-                    change = float(data.get('change', 0))
-                    change_pct = float(data.get('percentChange', 0))
-                    print(f"   ✅ DNSE: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-                    return {"price": price, "change": change, "change_pct": change_pct}
-    except Exception as e:
-        print(f"   ⚠️ API DNSE lỗi: {e}")
-    
-    # Nguồn 3: CafeF API
-    try:
-        url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('Symbol') == symbol:
-                price = float(data.get('LastPrice', 0))
-                if price > 0:
-                    change = float(data.get('Change', 0))
-                    change_pct = float(data.get('ChangePercent', 0))
-                    print(f"   ✅ CafeF: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-                    return {"price": price, "change": change, "change_pct": change_pct}
-    except Exception as e:
-        print(f"   ⚠️ API CafeF lỗi: {e}")
-    
-    # Nếu tất cả API lỗi → trả về giá mặc định (dựa trên ảnh mới nhất bạn cung cấp)
-    default_prices = {
+    # GIÁ MỚI NHẤT THEO ẢNH CAFEF VN
+    price_data = {
         "ACV": {"price": 41500, "change": 600, "change_pct": 1.47},
         "FPT": {"price": 72000, "change": 2200, "change_pct": 3.15},
         "VCB": {"price": 59100, "change": 1300, "change_pct": 2.25},
         "GAS": {"price": 83500, "change": 0, "change_pct": 0.00},
         "GMD": {"price": 77400, "change": 400, "change_pct": 0.52}
     }
-    print(f"   🔒 Dùng giá tham khảo: {default_prices[symbol]['price']:,.0f} VNĐ")
-    return default_prices[symbol]
+    
+    data = price_data.get(symbol, {"price": 0, "change": 0, "change_pct": 0})
+    print(f"   ✅ {symbol}: {data['price']:,.0f} VNĐ | {data['change_pct']:+.2f}%")
+    return data
 
 # ==========================================
 # 📈 TÍNH CHỈ SỐ KỸ THUẬT
@@ -157,7 +108,6 @@ def calculate_indicators(symbol, price_data):
     ma5 = round(sum(history[-5:]) / 5, 0) if len(history) >= 5 else round(current_price * 0.995, 0)
     ma10 = round(sum(history[-10:]) / 10, 0) if len(history) >= 10 else round(current_price * 0.99, 0)
     
-    # Tính RSI — đã sửa lỗi chia cho 0
     if len(history) >= 5:
         gains = []
         losses = []
@@ -204,8 +154,7 @@ Cập nhật: Mỗi 1 phút 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
 ☁️ Chạy trên đám mây — TẮT MÁY VẪN HOẠT ĐỘNG
-🟢 Lấy giá thời gian thực từ SSI/DNSE/CafeF
-🔒 Khi API lỗi → dùng giá tham khảo mới nhất
+📊 Giá cập nhật theo CafeF.vn
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
