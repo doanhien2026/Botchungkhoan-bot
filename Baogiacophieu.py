@@ -71,7 +71,7 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU THỜI GIAN THỰC TỪ API
+# 📊 LẤY DỮ LIỆU THỜI GIAN THỰC — BỎ NGUỒN 3
 # ==========================================
 def get_stock_data(symbol):
     print(f"🔄 Đang lấy giá thời gian thực {symbol}...")
@@ -110,17 +110,9 @@ def get_stock_data(symbol):
     except Exception as e:
         print(f"   ⚠️ API DNSE lỗi: {e}")
     
-    # NGUỒN 3: Giá dự phòng khi API lỗi
-    backup_data = {
-        "ACV": {"price": 41500, "change": 600, "change_pct": 1.47},
-        "FPT": {"price": 72000, "change": 2200, "change_pct": 3.15},
-        "VCB": {"price": 59100, "change": 1300, "change_pct": 2.25},
-        "GAS": {"price": 83500, "change": 0, "change_pct": 0.00},
-        "GMD": {"price": 77400, "change": 400, "change_pct": 0.52}
-    }
-    data = backup_data.get(symbol, {"price": 0, "change": 0, "change_pct": 0})
-    print(f"   🔒 [Dự phòng] {symbol}: {data['price']:,.0f} VNĐ | {data['change_pct']:+.2f}%")
-    return {"price": data["price"], "change": data["change"], "change_pct": data["change_pct"], "source": "🔒 Đóng cửa"}
+    # ❌ BỎ NGUỒN 3 — Không dùng giá cố định nữa, trả về None khi cả 2 API đều lỗi
+    print(f"   ❌ Không lấy được dữ liệu cho {symbol} — Cả 2 API đều không phản hồi")
+    return None
 
 # ==========================================
 # 📈 TÍNH CHỈ SỐ KỸ THUẬT + KHỔUYẾN NGHỊ CÓ GIÁ
@@ -169,9 +161,7 @@ def calculate_indicators(symbol, price_data):
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # ==========================================
-    # ✅ KHỔUYẾN NGHỊ CÓ GIÁ RÕ RÀNG
-    # ==========================================
+    # Khuyến nghị có giá rõ ràng
     mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
     ban = f"⏸️ Bán: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
     nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
@@ -189,6 +179,7 @@ print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
 print("📡 Nguồn dữ liệu: SSI Securities API + DNSE Entrade API")
+print("❌ Đã bỏ nguồn 3 — Không dùng giá cố định dự phòng")
 print("⏱️ Cập nhật mỗi phút — giá thời gian thực")
 print("💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể")
 
@@ -202,9 +193,10 @@ Cập nhật: Mỗi 1 phút 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
 📡 Nguồn dữ liệu thời gian thực: SSI + DNSE
+❌ Đã bỏ nguồn 3 — Không dùng giá cố định dự phòng
 💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể
 🟢 Mở cửa → lấy giá trực tiếp từ sàn
-🔒 Đóng cửa → dùng giá đóng cửa mới nhất
+🔒 Đóng cửa → không có dữ liệu thực, báo lỗi
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
@@ -231,11 +223,25 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         print(f"\n🔄 [{now.strftime('%H:%M:%S')}] Tạo báo cáo mới... | {status_text}")
         
         full_message = ""
+        has_data = False
         
         for symbol in WATCH_LIST:
             data = get_stock_data(symbol)
-            ind = calculate_indicators(symbol, data)
             
+            # Nếu không lấy được dữ liệu → bỏ qua cổ phiếu này
+            if data is None:
+                error_msg = f"\n⚠️ {symbol}: Không lấy được dữ liệu (Cả 2 API đều lỗi)\n"
+                print(error_msg)
+                full_message += f"""
+——————————————————————
+📊 {symbol} – ❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU
+📡 Nguồn: Không có — Cả SSI và DNSE đều không phản hồi
+⏭️ Bỏ qua cổ phiếu này
+"""
+                continue
+            
+            has_data = True
+            ind = calculate_indicators(symbol, data)
             change_pct_str = f"{data['change_pct']:+.2f}%"
             
             report = f"""
@@ -251,16 +257,15 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """
             full_message += report
         
-        full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi phút\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
-        
-        if send_telegram(full_message):
-            error_count = 0
+        if not has_data:
+            send_telegram("""
+❌ KHÔNG CÓ DỮ LIỆU
+Tất cả các cổ phiếu đều không lấy được giá từ API SSI và DNSE.
+Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.
+""")
         else:
-            error_count += 1
-            if error_count >= 10:
-                print(f"⚠️ {error_count} lần lỗi liên tiếp — chờ 1 phút rồi thử lại")
-                time.sleep(60)
-                error_count = 0
+            full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi phút\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
+            send_telegram(full_message)
         
         time.sleep(CHECK_INTERVAL)
     
