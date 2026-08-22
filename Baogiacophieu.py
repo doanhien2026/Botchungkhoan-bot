@@ -71,12 +71,12 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU CỔ PHIẾU — GIÁ MỚI NHẤT THEO ẢNH
+# 📊 LẤY DỮ LIỆU CỔ PHIẾU — GIÁ MỚI NHẤT THEO CAFEF
 # ==========================================
 def get_stock_data(symbol):
     print(f"🔄 Đang lấy giá {symbol}...")
     
-    # GIÁ MỚI NHẤT THEO ẢNH CAFEF VN
+    # ✅ GIÁ MỚI NHẤT THEO ẢNH CAFEF VN — KHÔNG ĐỔI NỮA
     price_data = {
         "ACV": {"price": 41500, "change": 600, "change_pct": 1.47},
         "FPT": {"price": 72000, "change": 2200, "change_pct": 3.15},
