@@ -170,7 +170,7 @@ def calculate_indicators(symbol, price_data):
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
     # ==========================================
-    # ✅ KHỔUYẾN NGHỊ CÓ GIÁ RÕ RÀNG — ĐÃ SỬA
+    # ✅ KHỔUYẾN NGHỊ CÓ GIÁ RÕ RÀNG
     # ==========================================
     mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
     ban = f"⏸️ Bán: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
