@@ -100,7 +100,7 @@ def get_stock_data(symbol):
                         "change_pct": change_pct, "volume": volume
                     }
                     print(f"   ✅ Lấy thành công: {price:,.0f} VNĐ")
-                    return last_close_price[symbol], "🟢 Nguồn: Trực tiếp"
+                    return last_close_price[symbol]
     except Exception as e:
         print(f"   ⚠️ API SSI lỗi: {e}")
     
@@ -122,13 +122,13 @@ def get_stock_data(symbol):
                         "change_pct": change_pct, "volume": volume
                     }
                     print(f"   ✅ Lấy thành công: {price:,.0f} VNĐ")
-                    return last_close_price[symbol], "🟢 Nguồn: Trực tiếp"
+                    return last_close_price[symbol]
     except Exception as e:
         print(f"   ⚠️ API DNSE lỗi: {e}")
     
     # TẤT CẢ API LỖI → DÙNG GIÁ ĐÓNG CỬA
     print(f"   🔒 Dùng giá đóng cửa: {last_close_price[symbol]['price']:,.0f} VNĐ")
-    return last_close_price[symbol], "🔒 Nguồn: Đóng cửa"
+    return last_close_price[symbol]
 
 # ==========================================
 # 📈 TÍNH CHỈ SỐ KỸ THUẬT
@@ -174,28 +174,13 @@ def calculate_indicators(symbol, price_data):
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # Khuyến nghị
-    if current_price > ma10 and rsi < 50 and price_data["change_pct"] < 0:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = "⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
-    elif current_price < ma5 and rsi > 55 and price_data["change_pct"] > 0.5:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = f"⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
-    else:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = "⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
-    
     return {
-        "mua": mua, "ban": ban, "nam_giu": nam_giu,
         "ma5": ma5, "ma10": ma10, "rsi": rsi,
         "support": support, "resistance": resistance
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — CHẠY 24/7
+# 🚀 BOT CHÍNH — CHẠY 24/7 — ĐỊNH DẠNG ĐÚNG NHƯ ẢNH
 # ==========================================
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
@@ -238,18 +223,19 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         
         print(f"\n🔄 [{now.strftime('%H:%M:%S')}] Tạo báo cáo mới... | {status_text}")
         
-        # Tạo báo cáo định dạng GIỐNG HỆT ẢNH
+        # Tạo báo cáo ĐÚNG ĐỊNH DẠNG VÀ EMOJI NHƯ ẢNH
         full_message = ""
         
         for symbol in WATCH_LIST:
-            data, source_text = get_stock_data(symbol)
+            data = get_stock_data(symbol)
             ind = calculate_indicators(symbol, data)
             
             # Định dạng thay đổi % có dấu + hoặc -
             change_pct_str = f"{data['change_pct']:+.2f}%"
             
-            # Báo cáo từng cổ phiếu
+            # Báo cáo từng cổ phiếu — ĐÚNG TỪNG EMOJI VÀ DÒNG NHƯ ẢNH
             report = f"""
+——————————————————————
 📊 {symbol} – Giá: {data['price']:,.0f} VND | Thay đổi: {change_pct_str}
 📡 Nguồn: 🔒
 📉 MA5: {ind['ma5']:,.0f} | MA10: {ind['ma10']:,.0f} | RSI: {ind['rsi']}
@@ -258,11 +244,10 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 ⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới
 ⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán
 ✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {ind['resistance']:,.0f} VND | Cắt lỗ dưới {ind['support']:,.0f} VND
-——————————————————————
 """
             full_message += report
         
-        full_message += "\n⏱️ Cập nhật mỗi phút\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
+        full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi phút\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
         
         if send_telegram(full_message):
             error_count = 0
