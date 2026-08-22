@@ -1,9 +1,7 @@
 import requests
 import time
 import sys
-import threading
 from datetime import datetime, timedelta
-from flask import Flask
 
 # ==========================================
 # ⚙️ CẤU HÌNH
@@ -19,18 +17,6 @@ last_close_price = {
     "ACV": {"price": 27600, "change": 150, "change_pct": 0.55, "volume": 12500000},
     "FPT": {"price": 98200, "change": -800, "change_pct": -0.81, "volume": 8700000}
 }
-
-# ==========================================
-# 🌐 WEB SERVER
-# ==========================================
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "✅ Bot Chứng Khoán đang chạy 24/7 — " + datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-
-def run_web():
-    app.run(host='0.0.0.0', port=10000)
 
 # ==========================================
 # 🤖 GỬI TIN NHẮN TELEGRAM
@@ -201,10 +187,6 @@ def calculate_indicators(symbol, price_data):
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
-
-web_thread = threading.Thread(target=run_web, daemon=True)
-web_thread.start()
-print("🌐 Web server đã chạy trên cổng 10000")
 
 if not test_bot_connection():
     print("\n❌ Sửa lỗi rồi chạy lại!")
