@@ -110,7 +110,7 @@ def get_stock_data(symbol):
     except Exception as e:
         print(f"   ⚠️ API DNSE lỗi: {e}")
     
-    # NGUỒN 3: Giá dự phòng khi API lỗi (dữ liệu mới nhất từ CafeF)
+    # NGUỒN 3: Giá dự phòng khi API lỗi
     backup_data = {
         "ACV": {"price": 41500, "change": 600, "change_pct": 1.47},
         "FPT": {"price": 72000, "change": 2200, "change_pct": 3.15},
@@ -123,14 +123,14 @@ def get_stock_data(symbol):
     return {"price": data["price"], "change": data["change"], "change_pct": data["change_pct"], "source": "🔒 Đóng cửa"}
 
 # ==========================================
-# 📈 TÍNH CHỈ SỐ KỸ THUẬT TỪ DỮ LIỆU THỰC
+# 📈 TÍNH CHỈ SỐ KỸ THUẬT + KHỔUYẾN NGHỊ CÓ GIÁ
 # ==========================================
 price_history = {}
 
 def calculate_indicators(symbol, price_data):
     current_price = price_data["price"]
     
-    # Lưu giá vào lịch sử để tính MA, RSI
+    # Lưu giá vào lịch sử
     if symbol not in price_history:
         price_history[symbol] = []
     price_history[symbol].append(current_price)
@@ -143,7 +143,7 @@ def calculate_indicators(symbol, price_data):
     ma5 = round(sum(history[-5:]) / 5, 0) if len(history) >= 5 else round(current_price * 0.995, 0)
     ma10 = round(sum(history[-10:]) / 10, 0) if len(history) >= 10 else round(current_price * 0.99, 0)
     
-    # Tính RSI — tránh chia cho 0
+    # Tính RSI
     if len(history) >= 5:
         gains = []
         losses = []
@@ -169,19 +169,21 @@ def calculate_indicators(symbol, price_data):
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # Logic khuyến nghị dựa trên dữ liệu thực
+    # ==========================================
+    # ✅ KHỔUYẾN NGHỊ CÓ THÊM GIÁ THAM CHIẾU
+    # ==========================================
     if current_price > ma10 and rsi < 50 and price_data["change_pct"] < 0:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = "⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
+        mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
+        ban = f"⏸️ Bán: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
+        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
     elif current_price < ma5 and rsi > 55 and price_data["change_pct"] > 0.5:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = f"⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
+        mua = f"⏸️ Mua: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
+        ban = f"⏸️ Bán: Giá hiện tại {current_price:,.0f} VND – cân nhắc chốt lời tại {resistance:,.0f} VND"
+        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
     else:
-        mua = "⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới"
-        ban = "⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán"
-        nam_giu = f"✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
+        mua = f"⏸️ Mua: Chờ tín hiệu rõ hơn – giá tham khảo {support:,.0f} VND"
+        ban = f"⏸️ Bán: Chờ tín hiệu chốt lời – giá tham khảo {resistance:,.0f} VND"
+        nam_giu = f"✅ Nắm giữ: Giá hiện tại {current_price:,.0f} VND | Mục tiêu {resistance:,.0f} VND | Cắt lỗ dưới {support:,.0f} VND"
     
     return {
         "mua": mua, "ban": ban, "nam_giu": nam_giu,
@@ -190,13 +192,14 @@ def calculate_indicators(symbol, price_data):
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — CHẠY 24/7, LẤY GIÁ THỜI GIAN THỰC
+# 🚀 BOT CHÍNH — CHẠY 24/7
 # ==========================================
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
 print("📡 Nguồn dữ liệu: SSI Securities API + DNSE Entrade API")
 print("⏱️ Cập nhật mỗi phút — giá thời gian thực")
+print("💰 Khuyến nghị: Có kèm giá tham khảo cụ thể")
 
 if not test_bot_connection():
     print("\n❌ Sửa lỗi rồi chạy lại!")
@@ -208,6 +211,7 @@ Cập nhật: Mỗi 1 phút 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
 📡 Nguồn dữ liệu thời gian thực: SSI + DNSE
+💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể
 🟢 Mở cửa → lấy giá trực tiếp từ sàn
 🔒 Đóng cửa → dùng giá đóng cửa mới nhất
 
@@ -250,9 +254,9 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 📉 MA5: {ind['ma5']:,.0f} | MA10: {ind['ma10']:,.0f} | RSI: {ind['rsi']}
 🛡️ Hỗ trợ: {ind['support']:,.0f} | Kháng cự: {ind['resistance']:,.0f}
 🎯 KHUYẾN NGHỊ:
-⏸️ Mua: Chờ tín hiệu rõ hơn – không mở lệnh mới
-⏸️ Bán: Chờ tín hiệu chốt lời – không vội bán
-✅ Nắm giữ: Tiếp tục giữ cổ phiếu | Mục tiêu {ind['resistance']:,.0f} VND | Cắt lỗ dưới {ind['support']:,.0f} VND
+{ind['mua']}
+{ind['ban']}
+{ind['nam_giu']}
 """
             full_message += report
         
