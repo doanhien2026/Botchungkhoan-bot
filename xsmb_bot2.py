@@ -2,20 +2,24 @@ import os
 import time
 import telebot
 from datetime import datetime
+from flask import Flask
 
 BOT_TOKEN = os.environ.get('BOT2_TOKEN')
 CHAT_ID = os.environ.get('CHANNEL_ID')
 
-print("🚀 BOT ĐANG KHỞI ĐỘNG...")
-print(f"📌 Token: {BOT_TOKEN[:15]}...")
-print(f"📌 Chat ID: {CHAT_ID}")
-
-if not BOT_TOKEN or not CHAT_ID:
-    print("❌ Thiếu BOT2_TOKEN hoặc CHANNEL_ID")
-    exit(1)
-
 bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
+# Trang web để UptimeRobot gọi
+@app.route('/')
+def home():
+    return "✅ BOT XSMB ĐANG CHẠY - Hoạt động bình thường!"
+
+@app.route('/health')
+def health():
+    return "ok"
+
+# Hàm gửi tin nhắn
 def gui_tin_nhan():
     try:
         now = datetime.now()
@@ -44,19 +48,26 @@ def gui_tin_nhan():
 🎲 Chơi có trách nhiệm - Chỉ giải trí!
 """
         bot.send_message(CHAT_ID, text)
-        print(f"✅ [{gio}] ĐÃ GỬI THÀNH CÔNG!")
-        return True
+        print(f"✅ [{gio}] Đã gửi tin nhắn thành công!")
     except Exception as e:
-        print(f"❌ LỖI GỬI: {e}")
-        return False
+        print(f"❌ Lỗi gửi: {e}")
+
+# Chạy bot trong luồng riêng
+def chay_bot():
+    print("⏰ Bắt đầu vòng lặp - Gửi mỗi giờ...")
+    # Gửi lần đầu ngay khi khởi động
+    gui_tin_nhan()
+    while True:
+        time.sleep(3600)  # ============== MỖI 1 GIỜ GỬI 1 LẦN ==============
+        gui_tin_nhan()
 
 if __name__ == "__main__":
-    # Gửi lần đầu tiên
-    gui_tin_nhan()
+    print("🚀 BOT XSMB ĐANG KHỞI ĐỘNG...")
+    print(f"📌 Chat ID: {CHAT_ID}")
     
-    # Vòng lặp gửi mỗi 1 phút
-    print("⏰ Bắt đầu đợi 1 phút...")
-    while True:
-        time.sleep(60)  # 60 giây = 1 phút
-        gui_tin_nhan()
-        print("⏰ Đợi thêm 1 phút nữa...")
+    # Khởi động luồng gửi tin nhắn
+    from threading import Thread
+    Thread(target=chay_bot).start()
+    
+    # Chạy web server để UptimeRobot giữ sống
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
