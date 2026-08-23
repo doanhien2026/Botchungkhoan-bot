@@ -8,10 +8,15 @@ from datetime import datetime, timedelta
 # ==========================================
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
-CHECK_INTERVAL = 3600
+CHECK_INTERVAL = 3600  # 3600 giây = 1 giờ
 WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
+
+# ==========================================
+# 💾 LƯU GIÁ PHIÊN CUỐI CÙNG KHI ĐÓNG CỬA
+# ==========================================
+last_known_data = {}  # Lưu trữ dữ liệu cuối cùng lấy được
 
 # ==========================================
 # 🤖 GỬI TIN NHẮN TELEGRAM
@@ -71,10 +76,24 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU THỜI GIAN THỰC — BỎ NGUỒN 3
+# 📊 LẤY DỮ LIỆU — LƯU GIÁ CUỐI KHI ĐÓNG CỬA
 # ==========================================
-def get_stock_data(symbol):
-    print(f"🔄 Đang lấy giá thời gian thực {symbol}...")
+def get_stock_data(symbol, is_market_open_now):
+    print(f"🔄 Đang lấy giá {symbol}... Thị trường: {'Mở cửa' if is_market_open_now else 'Đóng cửa'}")
+    
+    # Nếu thị trường đang đóng cửa VÀ đã có dữ liệu trước đó → trả về giá cuối đã lưu
+    if not is_market_open_now and symbol in last_known_data:
+        cached = last_known_data[symbol]
+        print(f"   🔒 [Giá phiên cuối] {symbol}: {cached['price']:,.0f} VNĐ | {cached['change_pct']:+.2f}%")
+        return {
+            "price": cached["price"],
+            "change": cached["change"],
+            "change_pct": cached["change_pct"],
+            "source": "🔒 Giá phiên cuối"
+        }
+    
+    # Nếu thị trường mở cửa HOẶC chưa có dữ liệu → gọi API
+    data = None
     
     # NGUỒN 1: API SSI Securities
     try:
@@ -82,36 +101,46 @@ def get_stock_data(symbol):
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
-            data = r.json()
-            if data.get('symbol') == symbol:
-                price = float(data.get('lastPrice', 0))
+            res = r.json()
+            if res.get('symbol') == symbol:
+                price = float(res.get('lastPrice', 0))
                 if price > 0:
-                    change = float(data.get('change', 0))
-                    change_pct = float(data.get('changePercent', 0))
+                    change = float(res.get('change', 0))
+                    change_pct = float(res.get('changePercent', 0))
+                    data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 SSI"}
                     print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-                    return {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 SSI"}
     except Exception as e:
         print(f"   ⚠️ API SSI lỗi: {e}")
     
     # NGUỒN 2: API DNSE / Entrade
-    try:
-        url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('symbol') == symbol:
-                price = float(data.get('price', 0))
-                if price > 0:
-                    change = float(data.get('change', 0))
-                    change_pct = float(data.get('percentChange', 0))
-                    print(f"   ✅ [DNSE] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-                    return {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 DNSE"}
-    except Exception as e:
-        print(f"   ⚠️ API DNSE lỗi: {e}")
+    if data is None:
+        try:
+            url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                res = r.json()
+                if res.get('symbol') == symbol:
+                    price = float(res.get('price', 0))
+                    if price > 0:
+                        change = float(res.get('change', 0))
+                        change_pct = float(res.get('percentChange', 0))
+                        data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 DNSE"}
+                        print(f"   ✅ [DNSE] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+        except Exception as e:
+            print(f"   ⚠️ API DNSE lỗi: {e}")
     
-    # ❌ BỎ NGUỒN 3 — Không dùng giá cố định nữa, trả về None khi cả 2 API đều lỗi
-    print(f"   ❌ Không lấy được dữ liệu cho {symbol} — Cả 2 API đều không phản hồi")
+    # ✅ LƯU LẠI DỮ LIỆU NẾU LẤY ĐƯỢC THÀNH CÔNG
+    if data is not None:
+        last_known_data[symbol] = {
+            "price": data["price"],
+            "change": data["change"],
+            "change_pct": data["change_pct"]
+        }
+        return data
+    
+    # ❌ Không lấy được dữ liệu và chưa có giá nào lưu trước đó
+    print(f"   ❌ Không lấy được dữ liệu cho {symbol}")
     return None
 
 # ==========================================
@@ -173,14 +202,14 @@ def calculate_indicators(symbol, price_data):
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — CHẠY 24/7
+# 🚀 BOT CHÍNH — CHẠY 24/7, 1 GIỜ 1 LẦN
 # ==========================================
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
 print("📡 Nguồn dữ liệu: SSI Securities API + DNSE Entrade API")
-print("❌ Đã bỏ nguồn 3 — Không dùng giá cố định dự phòng")
-print("⏱️ Cập nhật mỗi phút — giá thời gian thực")
+print("🔒 Đóng cửa → Dùng giá phiên cuối đã lưu")
+print("⏱️ Cập nhật mỗi 1 giờ")
 print("💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể")
 
 if not test_bot_connection():
@@ -189,14 +218,12 @@ if not test_bot_connection():
 
 send_telegram("""🚀 BOT ĐÃ CHẠY 24/7
 Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
-Cập nhật: Mỗi 1 phút 1 lần
+Cập nhật: Mỗi 1 giờ 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
-📡 Nguồn dữ liệu thời gian thực: SSI + DNSE
-❌ Đã bỏ nguồn 3 — Không dùng giá cố định dự phòng
-💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể
-🟢 Mở cửa → lấy giá trực tiếp từ sàn
-🔒 Đóng cửa → không có dữ liệu thực, báo lỗi
+📡 Nguồn dữ liệu: SSI + DNSE
+🔒 Đóng cửa → Dùng giá phiên cuối đã lưu
+💰 Khuyến nghị: Có kèm giá tham khảo cụ thể
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
@@ -226,17 +253,15 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         has_data = False
         
         for symbol in WATCH_LIST:
-            data = get_stock_data(symbol)
+            data = get_stock_data(symbol, is_open)
             
-            # Nếu không lấy được dữ liệu → bỏ qua cổ phiếu này
+            # Nếu không có dữ liệu nào từ trước → bỏ qua
             if data is None:
-                error_msg = f"\n⚠️ {symbol}: Không lấy được dữ liệu (Cả 2 API đều lỗi)\n"
-                print(error_msg)
                 full_message += f"""
 ——————————————————————
-📊 {symbol} – ❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU
-📡 Nguồn: Không có — Cả SSI và DNSE đều không phản hồi
-⏭️ Bỏ qua cổ phiếu này
+📊 {symbol} – ❌ CHƯA CÓ DỮ LIỆU
+📡 Nguồn: Chưa lấy được giá phiên đầu tiên
+⏭️ Vui lòng thử lại khi thị trường mở cửa
 """
                 continue
             
@@ -259,14 +284,15 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         
         if not has_data:
             send_telegram("""
-❌ KHÔNG CÓ DỮ LIỆU
-Tất cả các cổ phiếu đều không lấy được giá từ API SSI và DNSE.
-Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.
+❌ CHƯA CÓ DỮ LIỆU
+Chưa lấy được giá phiên đầu tiên từ API.
+Vui lòng chờ thị trường mở cửa để bot lấy dữ liệu.
 """)
         else:
-            full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi phút\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
+            full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi 1 giờ\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
             send_telegram(full_message)
         
+        print(f"💤 Ngủ {CHECK_INTERVAL/3600:.1f} giờ cho đến báo cáo tiếp theo...")
         time.sleep(CHECK_INTERVAL)
     
     except KeyboardInterrupt:
