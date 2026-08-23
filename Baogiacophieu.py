@@ -14,9 +14,9 @@ MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
 # ==========================================
-# 💾 LƯU GIÁ PHIÊN CUỐI CÙNG KHI ĐÓNG CỬA
+# 💾 LƯU GIÁ PHIÊN CUỐI + THỜI GIAN LƯU
 # ==========================================
-last_known_data = {}  # Lưu trữ dữ liệu cuối cùng lấy được
+last_known_data = {}  # Lưu: {symbol: {"price":..., "change":..., "change_pct":..., "saved_at":...}}
 
 # ==========================================
 # 🤖 GỬI TIN NHẮN TELEGRAM
@@ -76,23 +76,32 @@ def is_market_open():
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU — LƯU GIÁ CUỐI KHI ĐÓNG CỬA
+# 📊 LẤY DỮ LIỆU — 3 NGUỒN + LƯU GIÁ PHIÊN CUỐI
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
-    print(f"🔄 Đang lấy giá {symbol}... Thị trường: {'Mở cửa' if is_market_open_now else 'Đóng cửa'}")
+    print(f"\n🔄 [{datetime.now().strftime('%H:%M:%S')}] Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'}")
     
-    # Nếu thị trường đang đóng cửa VÀ đã có dữ liệu trước đó → trả về giá cuối đã lưu
-    if not is_market_open_now and symbol in last_known_data:
-        cached = last_known_data[symbol]
-        print(f"   🔒 [Giá phiên cuối] {symbol}: {cached['price']:,.0f} VNĐ | {cached['change_pct']:+.2f}%")
-        return {
-            "price": cached["price"],
-            "change": cached["change"],
-            "change_pct": cached["change_pct"],
-            "source": "🔒 Giá phiên cuối"
-        }
+    # ==========================================
+    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU
+    # ==========================================
+    if not is_market_open_now:
+        if symbol in last_known_data:
+            cached = last_known_data[symbol]
+            print(f"   🔒 DÙNG GIÁ PHIÊN CUỐI đã lưu lúc: {cached['saved_at']}")
+            print(f"      → {symbol}: {cached['price']:,.0f} VNĐ | {cached['change_pct']:+.2f}%")
+            return {
+                "price": cached["price"],
+                "change": cached["change"],
+                "change_pct": cached["change_pct"],
+                "source": f"🔒 Giá phiên cuối (lưu lúc {cached['saved_at']})"
+            }
+        else:
+            print(f"   ❌ Chưa có dữ liệu nào được lưu cho {symbol}")
+            return None
     
-    # Nếu thị trường mở cửa HOẶC chưa có dữ liệu → gọi API
+    # ==========================================
+    # 🟢 KHI MỞ CỬA → GỌI API LẤY GIÁ MỚI
+    # ==========================================
     data = None
     
     # NGUỒN 1: API SSI Securities
@@ -130,17 +139,42 @@ def get_stock_data(symbol, is_market_open_now):
         except Exception as e:
             print(f"   ⚠️ API DNSE lỗi: {e}")
     
-    # ✅ LƯU LẠI DỮ LIỆU NẾU LẤY ĐƯỢC THÀNH CÔNG
+    # NGUỒN 3: API CAFEF
+    if data is None:
+        try:
+            url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://cafef.vn/"
+            }
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                res = r.json()
+                if res.get('Symbol') == symbol:
+                    price = float(res.get('LastPrice', 0))
+                    if price > 0:
+                        change = float(res.get('Change', 0))
+                        change_pct = float(res.get('ChangePercent', 0))
+                        data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 CafeF"}
+                        print(f"   ✅ [CafeF] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+        except Exception as e:
+            print(f"   ⚠️ API CafeF lỗi: {e}")
+    
+    # ==========================================
+    # 💾 LƯU GIÁ MỚI NHẤT — Luôn cập nhật khi lấy được dữ liệu
+    # ==========================================
     if data is not None:
         last_known_data[symbol] = {
             "price": data["price"],
             "change": data["change"],
-            "change_pct": data["change_pct"]
+            "change_pct": data["change_pct"],
+            "saved_at": datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         }
+        print(f"   💾 ĐÃ LƯU GIÁ PHIÊN CUỐI cho {symbol} lúc: {last_known_data[symbol]['saved_at']}")
         return data
     
-    # ❌ Không lấy được dữ liệu và chưa có giá nào lưu trước đó
-    print(f"   ❌ Không lấy được dữ liệu cho {symbol}")
+    # ❌ Không lấy được dữ liệu
+    print(f"   ❌ Tất cả API đều không lấy được dữ liệu cho {symbol}")
     return None
 
 # ==========================================
@@ -207,8 +241,9 @@ def calculate_indicators(symbol, price_data):
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
-print("📡 Nguồn dữ liệu: SSI Securities API + DNSE Entrade API")
-print("🔒 Đóng cửa → Dùng giá phiên cuối đã lưu")
+print("📡 Nguồn dữ liệu: SSI → DNSE → CafeF (3 nguồn thời gian thực)")
+print("💾 Tự động lưu giá phiên cuối khi lấy được dữ liệu")
+print("🔒 Đóng cửa → Dùng giá đã lưu + hiển thị thời gian lưu")
 print("⏱️ Cập nhật mỗi 1 giờ")
 print("💰 Khuyến nghị: Đã cập nhật kèm giá tham khảo cụ thể")
 
@@ -221,8 +256,9 @@ Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
 Cập nhật: Mỗi 1 giờ 1 lần
 Theo dõi: """ + ', '.join(WATCH_LIST) + """
 
-📡 Nguồn dữ liệu: SSI + DNSE
-🔒 Đóng cửa → Dùng giá phiên cuối đã lưu
+📡 Nguồn dữ liệu: SSI → DNSE → CafeF
+💾 Tự động lưu giá phiên cuối khi lấy được dữ liệu
+🔒 Đóng cửa → Dùng giá đã lưu + hiển thị thời gian lưu
 💰 Khuyến nghị: Có kèm giá tham khảo cụ thể
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
@@ -247,7 +283,10 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
             last_weekday = weekday
         
-        print(f"\n🔄 [{now.strftime('%H:%M:%S')}] Tạo báo cáo mới... | {status_text}")
+        print(f"\n{'='*60}")
+        print(f"⏰ [{now.strftime('%d/%m/%Y %H:%M:%S')}] Bắt đầu chu kỳ báo cáo mới")
+        print(f"Trạng thái thị trường: {status_text}")
+        print(f"{'='*60}")
         
         full_message = ""
         has_data = False
@@ -260,8 +299,8 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
                 full_message += f"""
 ——————————————————————
 📊 {symbol} – ❌ CHƯA CÓ DỮ LIỆU
-📡 Nguồn: Chưa lấy được giá phiên đầu tiên
-⏭️ Vui lòng thử lại khi thị trường mở cửa
+📡 Nguồn: Chưa lấy được giá từ API nào
+⏭️ Vui lòng chờ thị trường mở cửa để bot lấy dữ liệu
 """
                 continue
             
@@ -285,14 +324,14 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         if not has_data:
             send_telegram("""
 ❌ CHƯA CÓ DỮ LIỆU
-Chưa lấy được giá phiên đầu tiên từ API.
+Tất cả các nguồn (SSI, DNSE, CafeF) đều không lấy được dữ liệu.
 Vui lòng chờ thị trường mở cửa để bot lấy dữ liệu.
 """)
         else:
             full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi 1 giờ\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
             send_telegram(full_message)
         
-        print(f"💤 Ngủ {CHECK_INTERVAL/3600:.1f} giờ cho đến báo cáo tiếp theo...")
+        print(f"\n💤 Ngủ {CHECK_INTERVAL/3600:.1f} giờ cho đến báo cáo tiếp theo...")
         time.sleep(CHECK_INTERVAL)
     
     except KeyboardInterrupt:
