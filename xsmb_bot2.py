@@ -15,7 +15,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 def send_message():
     try:
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        text = f"""🎯 BOT XSMB - TÍN HIỆU NGÀY {now}
+        text = f"""🎯 BOT XSMB - TEST 1 PHÚT
+⏰ Thời gian: {now}
 
 📊 Dự đoán tham khảo:
 🔹 Đặc biệt: Đang cập nhật...
@@ -38,11 +39,11 @@ if __name__ == "__main__":
     # Gửi tin nhắn đầu tiên
     send_message()
     
-    # === VÒNG LẶP GIỮ BOT LUÔN CHẠY ===
-    print("⏰ Bắt đầu vòng lặp...")
+    # VÒNG LẶP - TEST 1 PHÚT
+    print("⏰ Bắt đầu vòng lặp - Gửi mỗi 1 phút...")
     while True:
         try:
-            time.sleep(3600)  # Đợi 1 giờ
+            time.sleep(60)  # ============== 60 GIÂY = 1 PHÚT ==============
             send_message()
         except Exception as e:
             print(f"🔄 Lỗi vòng lặp: {e} - Thử lại sau 60s...")
