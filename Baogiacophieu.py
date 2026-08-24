@@ -15,8 +15,7 @@ MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
 # ==========================================
-# 💾 LƯU GIÁ CUỐI CÙNG ĐÃ LẤY ĐƯỢC TỪ API
-# CHỈ DÙNG KHI ĐÓNG CỬA — SẼ ĐƯỢC THAY THẾ BẰNG GIÁ MỚI KHI MỞ CỬA
+# 💾 LƯU GIÁ CUỐI CÙNG ĐÃ LẤY ĐƯỢC
 # ==========================================
 last_known_data = {
     "ACV": {"price": 0, "change": 0, "change_pct": 0, "saved_at": "Chưa có dữ liệu"},
@@ -96,14 +95,12 @@ def is_market_open():
     return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY GIÁ — LOGIC CHÍNH
+# 📊 LẤY GIÁ — CẬP NHẬT NGUỒN MỚI
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
     print(f"\n🔄 Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'}")
     
-    # ==========================================
-    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU TỪ LẦN GỌI API CUỐI CÙNG
-    # ==========================================
+    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU
     if not is_market_open_now:
         cached = last_known_data.get(symbol, {})
         if cached.get("price", 0) > 0:
@@ -117,14 +114,12 @@ def get_stock_data(symbol, is_market_open_now):
         print(f"   ⚠️ Chưa có dữ liệu nào được lưu cho {symbol}")
         return None
     
-    # ==========================================
-    # 🟢 KHI MỞ CỬA → GỌI API TRỰC TIẾP — KHÔNG DÙNG GIÁ CỐ ĐỊNH
-    # ==========================================
+    # 🟢 KHI MỞ CỬA → GỌI API
     data = None
     
-    # NGUỒN 1: SSI
+    # NGUỒN 1: VCBS API — đơn giản và ổn định
     try:
-        url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
+        url = f"https://api.vcbs.com.vn/marketdata/quote?symbol={symbol}"
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
@@ -132,38 +127,19 @@ def get_stock_data(symbol, is_market_open_now):
             if res.get("symbol") == symbol:
                 price = float(res.get("lastPrice", 0))
                 if price > 0:
+                    change = float(res.get("change", 0))
+                    change_pct = float(res.get("changePercent", 0))
                     data = {
                         "price": price,
-                        "change": float(res.get("change", 0)),
-                        "change_pct": float(res.get("changePercent", 0)),
-                        "source": "🟢 SSI — GIÁ THỜI GIAN THỰC"
+                        "change": change,
+                        "change_pct": change_pct,
+                        "source": "🟢 VCBS — GIÁ THỜI GIAN THỰC"
                     }
-                    print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {data['change_pct']:+.2f}%")
+                    print(f"   ✅ [VCBS] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
     except Exception as e:
-        print(f"   ⚠️ SSI lỗi: {e}")
+        print(f"   ⚠️ VCBS lỗi: {e}")
     
-    # NGUỒN 2: DNSE (nếu SSI lỗi)
-    if data is None:
-        try:
-            url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=10)
-            if r.status_code == 200:
-                res = r.json()
-                if res.get("symbol") == symbol:
-                    price = float(res.get("price", 0))
-                    if price > 0:
-                        data = {
-                            "price": price,
-                            "change": float(res.get("change", 0)),
-                            "change_pct": float(res.get("percentChange", 0)),
-                            "source": "🟢 DNSE — GIÁ THỜI GIAN THỰC"
-                        }
-                        print(f"   ✅ [DNSE] {symbol}: {price:,.0f} VNĐ | {data['change_pct']:+.2f}%")
-        except Exception as e:
-            print(f"   ⚠️ DNSE lỗi: {e}")
-    
-    # NGUỒN 3: CafeF (nếu cả 2 nguồn trên lỗi)
+    # NGUỒN 2: CafeF API
     if data is None:
         try:
             url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
@@ -174,19 +150,42 @@ def get_stock_data(symbol, is_market_open_now):
                 if res.get("Symbol") == symbol:
                     price = float(res.get("LastPrice", 0))
                     if price > 0:
+                        change = float(res.get("Change", 0))
+                        change_pct = float(res.get("ChangePercent", 0))
                         data = {
                             "price": price,
-                            "change": float(res.get("Change", 0)),
-                            "change_pct": float(res.get("ChangePercent", 0)),
+                            "change": change,
+                            "change_pct": change_pct,
                             "source": "🟢 CafeF — GIÁ THỜI GIAN THỰC"
                         }
-                        print(f"   ✅ [CafeF] {symbol}: {price:,.0f} VNĐ | {data['change_pct']:+.2f}%")
+                        print(f"   ✅ [CafeF] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
         except Exception as e:
             print(f"   ⚠️ CafeF lỗi: {e}")
     
-    # ==========================================
-    # 💾 LƯU GIÁ MỚI NHẤT ĐỂ DÙNG KHI ĐÓNG CỬA
-    # ==========================================
+    # NGUỒN 3: SSI API (dự phòng)
+    if data is None:
+        try:
+            url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                res = r.json()
+                if res.get("symbol") == symbol:
+                    price = float(res.get("lastPrice", 0))
+                    if price > 0:
+                        change = float(res.get("change", 0))
+                        change_pct = float(res.get("changePercent", 0))
+                        data = {
+                            "price": price,
+                            "change": change,
+                            "change_pct": change_pct,
+                            "source": "🟢 SSI — GIÁ THỜI GIAN THỰC"
+                        }
+                        print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+        except Exception as e:
+            print(f"   ⚠️ SSI lỗi: {e}")
+    
+    # 💾 LƯU GIÁ MỚI NHẤT
     if data:
         last_known_data[symbol] = {
             "price": data["price"],
@@ -197,8 +196,8 @@ def get_stock_data(symbol, is_market_open_now):
         print(f"   💾 Đã lưu giá mới cho {symbol}")
         return data
     
-    # ❌ Tất cả API lỗi → dùng giá đã lưu (nếu có)
-    print(f"   ⚠️ Tất cả API lỗi → dùng giá đã lưu")
+    # ❌ Tất cả API lỗi → dùng giá đã lưu
+    print(f"   ⚠️ Tất cả API lỗi → dùng giá đã lưu (nếu có)")
     cached = last_known_data.get(symbol, {})
     if cached.get("price", 0) > 0:
         return {
@@ -215,7 +214,6 @@ def get_stock_data(symbol, is_market_open_now):
 def calculate_indicators(symbol, price_data):
     current_price = price_data["price"]
     
-    # Lưu giá vào lịch sử
     if symbol not in price_history:
         price_history[symbol] = []
     price_history[symbol].append(current_price)
@@ -223,11 +221,9 @@ def calculate_indicators(symbol, price_data):
         price_history[symbol].pop(0)
     history = price_history[symbol]
     
-    # Tính MA5, MA10
     ma5 = round(sum(history[-5:]) / 5, 0) if len(history) >= 5 else round(current_price * 0.995, 0)
     ma10 = round(sum(history[-10:]) / 10, 0) if len(history) >= 10 else round(current_price * 0.99, 0)
     
-    # Tính RSI
     rsi = 50.0
     if len(history) >= 5:
         gains, losses = [], []
@@ -242,11 +238,9 @@ def calculate_indicators(symbol, price_data):
         else:
             rsi = round(100 - (100 / (1 + avg_gain / avg_loss)), 1)
     
-    # Hỗ trợ, Kháng cự
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # Khuyến nghị MUA
     if current_price < ma5 and current_price < support:
         mua = f"✅ <b>MUA NGAY:</b> Giá {current_price:,.0f} VND — Đã điều chỉnh về hỗ trợ {support:,.0f} VND"
     elif abs(current_price - support) / support < 0.01:
@@ -254,7 +248,6 @@ def calculate_indicators(symbol, price_data):
     else:
         mua = f"⏸️ <b>MUA:</b> Chờ giá điều chỉnh về {support:,.0f} VND"
     
-    # Khuyến nghị BÁN
     if current_price > ma5 and current_price > resistance:
         ban = f"✅ <b>BÁN NGAY:</b> Giá {current_price:,.0f} VND — Đã chạm kháng cự {resistance:,.0f} VND"
     elif abs(current_price - resistance) / resistance < 0.01:
@@ -262,7 +255,6 @@ def calculate_indicators(symbol, price_data):
     else:
         ban = f"⏸️ <b>BÁN:</b> Chờ giá lên mục tiêu {resistance:,.0f} VND"
     
-    # Khuyến nghị NẮM GIỮ
     if ma5 > ma10 and rsi > 50 and support < current_price < resistance:
         hold = "🟢 <b>NẮM GIỮ — Xu hướng tăng tốt</b>"
     elif ma5 < ma10 and rsi < 50:
@@ -302,7 +294,6 @@ def main():
             interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
             interval_text = "5 phút" if is_open else "1 giờ"
             
-            # Thông báo đổi trạng thái ngày mới
             if weekday != last_weekday:
                 send_telegram_message("""🔔 <b>THÔNG BÁO TRẠNG THÁI</b>
 📅 Ngày: """ + now.strftime('%d/%m/%Y') + """
@@ -317,7 +308,6 @@ def main():
             print(f"Trạng thái: {status_text} | Tần suất: {interval_text}")
             print(f"{'='*60}")
             
-            # Tạo báo cáo
             msg = "<b>📊 BÁO CÁO CỔ PHIẾU</b>\n"
             has_data = False
             
@@ -345,7 +335,7 @@ def main():
 """
             
             if not has_data:
-                send_telegram_message("❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU — Kiểm tra kết nối!")
+                send_telegram_message("❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU — Tất cả API hiện không phản hồi!")
             else:
                 msg += f"\n——————————————————\n⏱️ Báo cáo mỗi {interval_text}\n⚠️ <i>Chỉ tham khảo — tự quyết định giao dịch!</i>"
                 send_telegram_message(msg)
