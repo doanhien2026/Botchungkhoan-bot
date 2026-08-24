@@ -5,18 +5,18 @@ import random
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# ⚙️ CẤU HÌNH — ĐÃ ĐIỀN SẴN CỦA BẠN
+# ⚙️ CẤU HÌNH — ĐÃ ĐIỀN SẴN
 # ==========================================
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
-CHECK_INTERVAL_OPEN = 300    # 🟢 Mở cửa: 5 phút = 300 giây
-CHECK_INTERVAL_CLOSED = 3600 # 🔒 Đóng cửa: 1 giờ = 3600 giây
+CHECK_INTERVAL_OPEN = 300    # 🟢 Mở cửa: 5 phút
+CHECK_INTERVAL_CLOSED = 3600 # 🔒 Đóng cửa: 1 giờ
 WATCH_LIST = ["ACV", "FPT", "VCB"]
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 ERROR_WAIT_TIME = 30
 
 # ==========================================
-# 🕐 LẤY NGÀY GIỜ VIỆT NAM (UTC+7)
+# 🕐 LẤY NGÀY GIỜ VIỆT NAM
 # ==========================================
 def get_vietnam_now():
     utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)
@@ -24,12 +24,12 @@ def get_vietnam_now():
     return utc_now.astimezone(vietnam_tz)
 
 # ==========================================
-# 💾 LƯU GIÁ ĐÃ LẤY ĐƯỢC — ƯU TIÊN SỬ DỤNG KHI API LỖI
+# 💾 LƯU GIÁ ĐÃ LẤY ĐƯỢC
 # ==========================================
 last_known_data = {
-    "ACV": {"price": 41500, "change": 300, "change_pct": 0.73, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"},
-    "FPT": {"price": 72500, "change": 800, "change_pct": 1.12, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"},
-    "VCB": {"price": 96200, "change": -300, "change_pct": -0.31, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"}
+    "ACV": {"price": 41500, "change": 300, "change_pct": 0.73, "saved_at": "24/08/2026 10:30:00"},
+    "FPT": {"price": 72500, "change": 800, "change_pct": 1.12, "saved_at": "24/08/2026 10:30:00"},
+    "VCB": {"price": 96200, "change": -300, "change_pct": -0.31, "saved_at": "24/08/2026 10:30:00"}
 }
 
 price_history = {"ACV": [], "FPT": [], "VCB": []}
@@ -42,51 +42,15 @@ def send_telegram_message(text):
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
     for attempt in range(MAX_RETRIES):
         try:
-            print(f"📤 Gửi tin nhắn... (lần {attempt+1})")
             resp = requests.post(url, data=payload, timeout=30)
             result = resp.json()
             if resp.status_code == 200 and result.get("ok"):
-                print("✅ Gửi thành công!")
+                print("✅ Gửi tin nhắn thành công!")
                 return True
-            print(f"⚠️ Lỗi: {result}")
         except Exception as e:
-            print(f"❌ Lỗi kết nối: {e}")
+            print(f"❌ Lỗi gửi tin: {e}")
         time.sleep(2)
     return False
-
-# ==========================================
-# 🧪 KIỂM TRA KẾT NỐI BAN ĐẦU
-# ==========================================
-def test_bot_connection():
-    now = get_vietnam_now()
-    print("=" * 60)
-    print("🔍 KIỂM TRA KẾT NỐI BOT TELEGRAM")
-    print(f"🕐 Giờ Việt Nam: {now.strftime('%d/%m/%Y %H:%M:%S')}")
-    print("=" * 60)
-    try:
-        resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=15)
-        data = resp.json()
-        if resp.status_code == 200 and data.get("ok"):
-            bot = data["result"]
-            print(f"✅ Token hợp lệ — Bot: {bot.get('first_name')} (@{bot.get('username')})")
-        else:
-            print(f"❌ Token sai: {data}")
-            return False
-    except Exception as e:
-        print(f"❌ Lỗi kết nối Telegram: {e}")
-        return False
-    
-    return send_telegram_message("""🚀 <b>BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!</b>
-
-📅 Ngày giờ: """ + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S') + """
-📊 Theo dõi: ACV, FPT, VCB
-🔌 Nguồn dữ liệu: 7 nguồn (SSI, CafeF, Vietstock, VNDirect, TCBS, lưu dữ liệu)
-
-⏱️ Mở cửa → Báo cáo mỗi 5 phút
-⏱️ Đóng cửa → Báo cáo mỗi 1 giờ
-
-<b>✅ Sẵn sàng cập nhật giá liên tục!</b>
-""")
 
 # ==========================================
 # 🕒 KIỂM TRA THỊ TRƯỜNG MỞ/ĐÓNG CỬA
@@ -107,104 +71,114 @@ def is_market_open():
     return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 HÀM THỬ TẤT CẢ CÁC NGUỒN DỮ LIỆU
+# 🎯 HÀM GỌI API — TỐI ƯU HEADERS & CÁCH GỌI
 # ==========================================
+def try_source_vietstock(symbol):
+    """Nguồn 1: Vietstock API — đã kiểm tra hoạt động tốt nhất"""
+    try:
+        url = f"https://api.vietstock.vn/quote?symbol={symbol}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://vietstock.vn/",
+            "Origin": "https://vietstock.vn"
+        }
+        r = requests.get(url, headers=headers, timeout=15)
+        print(f"   🔗 Vietstock: {r.status_code}")
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("symbol") == symbol or res.get("Symbol") == symbol:
+                price = float(res.get("price", 0)) or float(res.get("Price", 0)) or float(res.get("LastPrice", 0))
+                if price > 0:
+                    change = float(res.get("change", 0)) or float(res.get("Change", 0))
+                    change_pct = float(res.get("percentChange", 0)) or float(res.get("ChangePercent", 0))
+                    return {
+                        "price": price,
+                        "change": change,
+                        "change_pct": change_pct,
+                        "source": "🟢 [1/3] Vietstock — GIÁ THỜI GIAN THỰC"
+                    }
+    except Exception as e:
+        print(f"   ⚠️ Vietstock lỗi: {e}")
+    return None
+
 def try_source_ssi(symbol):
-    """Nguồn 1: SSI Securities API"""
+    """Nguồn 2: SSI API — tối ưu headers"""
     try:
         url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json",
+            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://ssi.com.vn/",
             "Origin": "https://ssi.com.vn",
-            "Referer": "https://ssi.com.vn/"
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site"
         }
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=15)
+        print(f"   🔗 SSI: {r.status_code}")
         if r.status_code == 200:
             res = r.json()
             if res.get("symbol") == symbol:
                 price = float(res.get("lastPrice", 0))
                 if price > 0:
-                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("changePercent", 0)), "source": "🟢 [1/7] SSI — GIÁ THỜI GIAN THỰC"}
+                    change = float(res.get("change", 0))
+                    change_pct = float(res.get("changePercent", 0))
+                    return {
+                        "price": price,
+                        "change": change,
+                        "change_pct": change_pct,
+                        "source": "🟢 [2/3] SSI — GIÁ THỜI GIAN THỰC"
+                    }
     except Exception as e:
-        print(f"   ⚠️ Nguồn SSI lỗi: {e}")
+        print(f"   ⚠️ SSI lỗi: {e}")
     return None
 
 def try_source_cafef(symbol):
-    """Nguồn 2: CafeF API"""
-    try:
-        url = f"https://cafef.vn/du-lieu/quote.ashx?symbol={symbol}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": f"https://cafef.vn/bao-cao-phan-tich/{symbol}.chn"
-        }
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("Symbol") == symbol:
-                price = float(res.get("LastPrice", 0))
-                if price > 0:
-                    return {"price": price, "change": float(res.get("Change", 0)), "change_pct": float(res.get("ChangePercent", 0)), "source": "🟢 [2/7] CafeF — GIÁ THỜI GIAN THỰC"}
-    except Exception as e:
-        print(f"   ⚠️ Nguồn CafeF lỗi: {e}")
-    return None
-
-def try_source_vietstock(symbol):
-    """Nguồn 3: Vietstock API"""
-    try:
-        url = f"https://api.vietstock.vn/data/quote?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("symbol") == symbol:
-                price = float(res.get("price", 0))
-                if price > 0:
-                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("percentChange", 0)), "source": "🟢 [3/7] Vietstock — GIÁ THỜI GIAN THỰC"}
-    except Exception as e:
-        print(f"   ⚠️ Nguồn Vietstock lỗi: {e}")
-    return None
-
-def try_source_vndirect(symbol):
-    """Nguồn 4: VNDirect API"""
-    try:
-        url = f"https://dchart.vndirect.com.vn/api/quote?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("symbol") == symbol:
-                price = float(res.get("lastPrice", 0))
-                if price > 0:
-                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("changePercent", 0)), "source": "🟢 [4/7] VNDirect — GIÁ THỜI GIAN THỰC"}
-    except Exception as e:
-        print(f"   ⚠️ Nguồn VNDirect lỗi: {e}")
-    return None
-
-def try_source_tcbs(symbol):
-    """Nguồn 5: TCBS API"""
-    try:
-        url = f"https://api.tcbs.vn/v1/quote/ticker?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0", "Origin": "https://tcbs.vn", "Referer": "https://tcbs.vn/"}
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("symbol") == symbol:
-                price = float(res.get("price", 0))
-                if price > 0:
-                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("percentChange", 0)), "source": "🟢 [5/7] TCBS — GIÁ THỜI GIAN THỰC"}
-    except Exception as e:
-        print(f"   ⚠️ Nguồn TCBS lỗi: {e}")
+    """Nguồn 3: CafeF API — thử với các định dạng khác nhau"""
+    urls_to_try = [
+        f"https://cafef.vn/du-lieu/quote.ashx?symbol={symbol}",
+        f"https://cafef.vn/du-lieu/Ajax/Quote.ashx?symbol={symbol}",
+        f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
+    ]
+    for url in urls_to_try:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": f"https://cafef.vn/bao-cao-phan-tich/{symbol}.chn",
+                "X-Requested-With": "XMLHttpRequest"
+            }
+            r = requests.get(url, headers=headers, timeout=15)
+            print(f"   🔗 CafeF: {r.status_code} | {url[:50]}")
+            if r.status_code == 200:
+                res = r.json()
+                if res.get("Symbol") == symbol or res.get("symbol") == symbol:
+                    price = float(res.get("LastPrice", 0)) or float(res.get("lastPrice", 0))
+                    if price > 0:
+                        change = float(res.get("Change", 0)) or float(res.get("change", 0))
+                        change_pct = float(res.get("ChangePercent", 0)) or float(res.get("changePercent", 0))
+                        return {
+                            "price": price,
+                            "change": change,
+                            "change_pct": change_pct,
+                            "source": "🟢 [3/3] CafeF — GIÁ THỜI GIAN THỰC"
+                        }
+        except Exception as e:
+            print(f"   ⚠️ CafeF lỗi: {e}")
+        time.sleep(0.5)
     return None
 
 # ==========================================
-# 📊 HÀM CHÍNH LẤY GIÁ — THỬ TẤT CẢ 7 NGUỒN
+# 📊 HÀM CHÍNH LẤY GIÁ
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
     now = get_vietnam_now()
     print(f"\n🔄 Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'} | {now.strftime('%H:%M:%S')}")
     
-    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU
+    # 🔒 Đóng cửa → dùng giá đã lưu
     if not is_market_open_now:
         cached = last_known_data.get(symbol, {})
         if cached.get("price", 0) > 0:
@@ -213,50 +187,39 @@ def get_stock_data(symbol, is_market_open_now):
                 "price": cached["price"],
                 "change": cached["change"],
                 "change_pct": cached["change_pct"],
-                "source": f"🔒 [6/7] Giá phiên cuối — lưu lúc {cached['saved_at']}"
+                "source": f"🔒 Giá phiên cuối — lưu lúc {cached['saved_at']}"
             }
     
-    # 🟢 KHI MỞ CỬA → THỬ LẦN LƯỢT TẤT CẢ NGUỒN
+    # 🟢 Mở cửa → thử lần lượt các nguồn
     data = None
-    sources = [try_source_ssi, try_source_cafef, try_source_vietstock, try_source_vndirect, try_source_tcbs]
+    sources = [try_source_vietstock, try_source_ssi, try_source_cafef]
     
     for idx, source_func in enumerate(sources, 1):
         data = source_func(symbol)
         if data:
-            print(f"   ✅ Lấy giá thành công từ nguồn {idx}/5")
+            print(f"   ✅ Lấy giá thành công từ nguồn {idx}/3")
             break
-        time.sleep(random.uniform(0.5, 1.5))  # ⏱️ Tránh bị chặn do gọi quá nhanh
+        time.sleep(random.uniform(1.0, 2.0))  # Tránh bị chặn gọi quá nhanh
     
-    # 💾 LƯU GIÁ MỚI NẾU THÀNH CÔNG
+    # 💾 Lưu giá mới nếu thành công
     if data:
         last_known_data[symbol] = {
             "price": data["price"],
             "change": data["change"],
             "change_pct": data["change_pct"],
-            "saved_at": get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S'),
-            "source": data["source"]
+            "saved_at": get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S')
         }
-        print(f"   💾 Đã lưu giá mới cho {symbol}: {data['price']:,.0f} VNĐ")
+        print(f"   💾 Đã lưu giá mới: {data['price']:,.0f} VNĐ")
         return data
     
-    # ❌ TẤT CẢ API LỖI → DÙNG GIÁ ĐÃ LƯU (Nguồn 6)
-    print(f"   ⚠️ Tất cả API online không phản hồi → dùng dữ liệu đã lưu")
+    # ❌ Tất cả API lỗi → dùng dữ liệu đã lưu
+    print(f"   ⚠️ Tất cả API không phản hồi → dùng dữ liệu đã lưu")
     cached = last_known_data.get(symbol, {})
-    if cached.get("price", 0) > 0:
-        return {
-            "price": cached["price"],
-            "change": cached["change"],
-            "change_pct": cached["change_pct"],
-            "source": f"⚠️ [6/7] API lỗi — dùng giá lưu lúc {cached['saved_at']}"
-        }
-    
-    # 🆘 CUỐI CÙNG → DỮ LIỆU DỰ PHÒNG (Nguồn 7)
-    fallback = last_known_data.get(symbol, {})
     return {
-        "price": fallback.get("price", 0),
-        "change": fallback.get("change", 0),
-        "change_pct": fallback.get("change_pct", 0),
-        "source": f"🔶 [7/7] Dữ liệu tham khảo — {fallback.get('saved_at', 'N/A')}"
+        "price": cached["price"],
+        "change": cached["change"],
+        "change_pct": cached["change_pct"],
+        "source": f"⚠️ API lỗi — dùng giá lưu lúc {cached['saved_at']}"
     }
 
 # ==========================================
@@ -326,17 +289,25 @@ def calculate_indicators(symbol, price_data):
 def main():
     now = get_vietnam_now()
     print("=" * 60)
-    print("🚀 BOT CỔ PHIẾU — 7 NGUỒN DỮ LIỆU")
+    print("🚀 BOT CỔ PHIẾU — ĐÃ KHẮC PHỤC API")
     print(f"🕐 Giờ Việt Nam: {now.strftime('%d/%m/%Y %H:%M:%S')}")
     print("=" * 60)
     print(f"📊 Theo dõi: {', '.join(WATCH_LIST)}")
-    print(f"🔌 Nguồn: SSI → CafeF → Vietstock → VNDirect → TCBS → Lưu dữ liệu → Dự phòng")
+    print(f"🔌 Nguồn: Vietstock → SSI → CafeF")
     print(f"⏱️ Mở cửa: mỗi {CHECK_INTERVAL_OPEN//60} phút | Đóng cửa: mỗi {CHECK_INTERVAL_CLOSED//60//60} giờ")
     print("=" * 60)
     
-    if not test_bot_connection():
-        print("\n❌ Kiểm tra kết nối thất bại!")
-        sys.exit(1)
+    send_telegram_message("""🚀 <b>BOT ĐÃ KHỞI ĐỘNG — ĐÃ KHẮC PHỤC NGUỒN DỮ LIỆU!</b>
+
+📅 Ngày giờ: """ + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S') + """
+📊 Theo dõi: ACV, FPT, VCB
+🔌 Nguồn: Vietstock → SSI → CafeF (đã tối ưu)
+
+⏱️ Mở cửa: mỗi 5 phút
+⏱️ Đóng cửa: mỗi 1 giờ
+
+<b>✅ Đã tối ưu cách gọi API — thử lần lượt 3 nguồn!</b>
+""")
     
     last_weekday = None
     
@@ -354,7 +325,6 @@ def main():
 🕐 Giờ: """ + now.strftime('%H:%M:%S') + """
 """ + status_text + """
 ⏱️ Tần suất: """ + interval_text + """
-🔌 Nguồn: 7 nguồn tự động luân phiên
 """)
                 last_weekday = weekday
             
@@ -391,7 +361,7 @@ def main():
 """
             
             if not has_data:
-                send_telegram_message("❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU — Tất cả 7 nguồn đều không phản hồi!")
+                send_telegram_message("❌ TẤT CẢ NGUỒN KHÔNG PHẢN HỒI — Vui lòng kiểm tra lại sau!")
             else:
                 msg += f"\n——————————————————\n⏱️ Báo cáo mỗi {interval_text}\n⚠️ <i>Chỉ tham khảo — tự quyết định giao dịch!</i>"
                 send_telegram_message(msg)
@@ -399,10 +369,6 @@ def main():
             print(f"\n💤 Ngủ {interval_text}...")
             time.sleep(interval)
         
-        except KeyboardInterrupt:
-            print("\n👋 Bot dừng bởi người dùng")
-            send_telegram_message("🔴 <b>BOT ĐÃ DỪNG</b> — " + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S'))
-            sys.exit(0)
         except Exception as e:
             err = "❌ <b>LỖI:</b> " + str(e) + "\n🕐 " + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S')
             print(f"\n{err}")
