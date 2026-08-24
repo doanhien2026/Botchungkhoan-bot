@@ -8,15 +8,14 @@ from datetime import datetime, timedelta
 # ==========================================
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
-CHECK_INTERVAL = 3600  # 3600 giây = 1 giờ
-WATCH_LIST = ["ACV", "FPT", "VCB", "GAS", "GMD"]
+CHECK_INTERVAL_OPEN = 300    # 🟢 Mở cửa: 5 phút = 300 giây
+CHECK_INTERVAL_CLOSED = 3600 # 🔒 Đóng cửa: 1 giờ = 3600 giây
+WATCH_LIST = ["ACV", "FPT", "VCB"]  # ✅ CHỈ 3 MÃ
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
 # ==========================================
-# 💾 DỮ LIỆU PHIÊN CUỐI — ĐƯỢC LƯU TỪ TRƯỚC
-# Các giá này là giá thực tế phiên giao dịch cuối cùng (21/08/2026 - Thứ 6)
-# Khi thị trường mở cửa, bot sẽ tự động cập nhật giá mới thay thế
+# 💾 DỮ LIỆU PHIÊN CUỐI — 3 MÃ
 # ==========================================
 last_known_data = {
     "ACV": {
@@ -36,18 +35,6 @@ last_known_data = {
         "change": -1200,
         "change_pct": -1.20,
         "saved_at": "21/08/2026 15:00:00"
-    },
-    "GAS": {
-        "price": 9200,
-        "change": 150,
-        "change_pct": 1.66,
-        "saved_at": "21/08/2026 15:00:00"
-    },
-    "GMD": {
-        "price": 56200,
-        "change": -800,
-        "change_pct": -1.40,
-        "saved_at": "21/08/2026 15:00:00"
     }
 }
 
@@ -55,9 +42,7 @@ last_known_data = {
 price_history = {
     "ACV": [40800, 41000, 41200, 41300, 41500, 41400, 41350, 41450, 41500, 41500],
     "FPT": [69000, 69500, 70000, 70500, 71000, 71200, 71500, 71800, 72000, 72000],
-    "VCB": [100000, 99500, 99000, 98800, 98500, 98700, 98600, 98550, 98500, 98500],
-    "GAS": [8900, 8950, 9000, 9050, 9100, 9120, 9150, 9180, 9200, 9200],
-    "GMD": [57500, 57000, 56800, 56500, 56200, 56400, 56300, 56250, 56200, 56200]
+    "VCB": [100000, 99500, 99000, 98800, 98500, 98700, 98600, 98550, 98500, 98500]
 }
 
 # ==========================================
@@ -312,16 +297,17 @@ def calculate_indicators(symbol, price_data):
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — CHẠY 24/7, 1 GIỜ 1 LẦN
+# 🚀 BOT CHÍNH — TỰ ĐỘNG ĐỔI TẦN SUẤT THEO THỊ TRƯỜNG
 # ==========================================
 print("=" * 60)
 print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
 print("=" * 60)
 print("📡 Nguồn dữ liệu: SSI → DNSE → CafeF (3 nguồn thời gian thực)")
+print("⏱️ Mở cửa → Mỗi 5 phút cập nhật giá mới")
+print("⏱️ Đóng cửa → Mỗi 1 giờ dùng giá phiên cuối")
 print("💾 Có sẵn giá phiên cuối — báo cáo ngay cả khi đóng cửa")
-print("🔄 Mở cửa → Tự động cập nhật giá mới + thay thế giá cũ")
-print("⏱️ Cập nhật mỗi 1 giờ")
-print("💰 Khuyến nghị: Có tín hiệu Mua/Bán/Nắm giữ rõ ràng + giá")
+print("💰 Khuyến nghị: Tín hiệu Mua/Bán/Nắm giữ rõ ràng kèm giá")
+print("📊 Theo dõi 3 mã: ACV, FPT, VCB")
 
 if not test_bot_connection():
     print("\n❌ Sửa lỗi rồi chạy lại!")
@@ -329,13 +315,12 @@ if not test_bot_connection():
 
 send_telegram("""🚀 BOT ĐÃ CHẠY 24/7
 Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
-Cập nhật: Mỗi 1 giờ 1 lần
-Theo dõi: """ + ', '.join(WATCH_LIST) + """
+Theo dõi: ACV, FPT, VCB
 
-📡 Nguồn dữ liệu: SSI → DNSE → CafeF
-💾 Có sẵn giá phiên cuối — báo cáo ngay cả khi đóng cửa
-🔄 Mở cửa → Tự động cập nhật giá mới + thay thế giá cũ
-💰 Khuyến nghị: Tín hiệu Mua/Bán/Nắm giữ rõ ràng kèm giá
+⏱️ Mở cửa → Báo cáo mỗi 5 phút
+⏱️ Đóng cửa → Báo cáo mỗi 1 giờ
+📡 Nguồn: SSI → DNSE → CafeF
+💰 Khuyến nghị: Mua/Bán/Nắm giữ rõ ràng
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
@@ -350,10 +335,15 @@ while True:
         weekday = now.weekday()
         is_open, status_text = is_market_open()
         
+        # Xác định khoảng thời gian chờ dựa vào trạng thái thị trường
+        current_interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
+        interval_text = "5 phút" if is_open else "1 giờ"
+        
         if weekday != last_weekday:
             send_telegram("""🔔 THÔNG BÁO TRẠNG THÁI
 Ngày giờ: """ + now.strftime('%d/%m/%Y %H:%M:%S') + """
 """ + status_text + """
+⏱️ Tần suất báo cáo: """ + interval_text + """
 
 Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
 """)
@@ -362,6 +352,7 @@ Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
         print(f"\n{'='*60}")
         print(f"⏰ [{now.strftime('%d/%m/%Y %H:%M:%S')}] Bắt đầu chu kỳ báo cáo mới")
         print(f"Trạng thái thị trường: {status_text}")
+        print(f"Tần suất tiếp theo: {interval_text} ({current_interval} giây)")
         print(f"{'='*60}")
         
         full_message = ""
@@ -404,11 +395,11 @@ Vui lòng thử lại sau.
 Vui lòng kiểm tra kết nối và thử lại.
 """)
         else:
-            full_message += "\n——————————————————————\n⏱️ Cập nhật mỗi 1 giờ\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
+            full_message += "\n——————————————————————\n⏱️ Báo cáo mỗi " + interval_text + "\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
             send_telegram(full_message)
         
-        print(f"\n💤 Ngủ {CHECK_INTERVAL/3600:.1f} giờ cho đến báo cáo tiếp theo...")
-        time.sleep(CHECK_INTERVAL)
+        print(f"\n💤 Ngủ {interval_text} ({current_interval} giây) cho đến chu kỳ tiếp theo...")
+        time.sleep(current_interval)
     
     except KeyboardInterrupt:
         print("\n👋 Bot đã được dừng thủ công")
