@@ -4,13 +4,13 @@ import sys
 from datetime import datetime, timedelta
 
 # ==========================================
-# ⚙️ CẤU HÌNH
+# ⚙️ CẤU HÌNH — ĐÃ ĐIỀN SẴN TOKEN & ID CỦA BẠN
 # ==========================================
 BOT_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
 CHECK_INTERVAL_OPEN = 300    # 🟢 Mở cửa: 5 phút = 300 giây
 CHECK_INTERVAL_CLOSED = 3600 # 🔒 Đóng cửa: 1 giờ = 3600 giây
-WATCH_LIST = ["ACV", "FPT", "VCB"]  # ✅ CHỈ 3 MÃ
+WATCH_LIST = ["ACV", "FPT", "VCB"]  # ✅ 3 mã cổ phiếu
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
@@ -38,7 +38,7 @@ last_known_data = {
     }
 }
 
-# Khởi tạo lịch sử giá dựa trên giá phiên cuối
+# Lịch sử giá để tính chỉ số
 price_history = {
     "ACV": [40800, 41000, 41200, 41300, 41500, 41400, 41350, 41450, 41500, 41500],
     "FPT": [69000, 69500, 70000, 70500, 71000, 71200, 71500, 71800, 72000, 72000],
@@ -46,95 +46,125 @@ price_history = {
 }
 
 # ==========================================
-# 🤖 GỬI TIN NHẮN TELEGRAM
+# 🤖 HÀM GỬI TIN NHẮN TELEGRAM — ĐÃ KIỂM TRA
 # ==========================================
-def send_telegram(text, max_retries=MAX_RETRIES):
+def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    for attempt in range(max_retries):
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    
+    for attempt in range(MAX_RETRIES):
         try:
-            data = {"chat_id": CHAT_ID, "text": text}
-            r = requests.post(url, data=data, timeout=30)
-            res = r.json()
-            if res.get("ok"):
-                print(f"✅ [{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] Đã gửi báo cáo!")
+            print(f"📤 Đang gửi tin nhắn... (lần thử {attempt+1}/{MAX_RETRIES})")
+            response = requests.post(url, data=payload, timeout=30)
+            result = response.json()
+            
+            if response.status_code == 200 and result.get("ok"):
+                print(f"✅ Tin nhắn đã gửi thành công!")
                 return True
+            else:
+                print(f"⚠️ Lỗi gửi tin: {result}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(2)
         except Exception as e:
-            print(f"  ⚠️ Lỗi gửi lần {attempt+1}: {e}")
-        time.sleep(3)
-    print(f"❌ Không gửi được sau {max_retries} lần")
+            print(f"❌ Lỗi kết nối Telegram: {e}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(2)
+    
+    print(f"❌ Gửi tin nhắn thất bại sau {MAX_RETRIES} lần thử")
     return False
 
 # ==========================================
-# 🧪 KIỂM TRA KẾT NỐI BOT
+# 🧪 KIỂM TRA KẾT NỐI BAN ĐẦU
 # ==========================================
 def test_bot_connection():
-    print("🔍 Kiểm tra kết nối Bot Telegram...")
+    print("=" * 60)
+    print("🔍 KIỂM TRA KẾT NỐI BOT TELEGRAM...")
+    print("=" * 60)
+    
+    # Kiểm tra Token
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
     try:
-        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=15)
-        res = r.json()
-        if not res.get("ok"):
-            print(f"❌ Token sai hoặc hết hạn!")
+        resp = requests.get(url, timeout=15)
+        data = resp.json()
+        if resp.status_code == 200 and data.get("ok"):
+            bot_info = data["result"]
+            print(f"✅ Token hợp lệ!")
+            print(f"   Tên Bot: {bot_info.get('first_name')}")
+            print(f"   Username: @{bot_info.get('username')}")
+        else:
+            print(f"❌ Token không hợp lệ! Phản hồi: {data}")
             return False
-        bot_name = res['result']['first_name']
-        print(f"✅ Token hợp lệ — Bot: {bot_name}")
-        if send_telegram(f"🔍 Kết nối thành công — {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\nBot sẽ chạy 24/7 không ngừng!"):
-            print(f"✅ Chat ID hợp lệ — Bot có thể gửi tin nhắn!")
-            return True
-        return False
     except Exception as e:
-        print(f"❌ Lỗi kết nối: {e}")
+        print(f"❌ Không kết nối được Telegram: {e}")
         return False
+    
+    # Gửi tin nhắn kiểm tra
+    test_msg = f"""🚀 <b>BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!</b>
+
+📅 Ngày giờ: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+📊 Theo dõi: ACV, FPT, VCB
+
+⏱️ Mở cửa → Báo cáo mỗi 5 phút
+⏱️ Đóng cửa → Báo cáo mỗi 1 giờ
+📡 Nguồn dữ liệu: SSI → DNSE → CafeF
+
+<b>✅ Sẵn sàng gửi tín hiệu!</b>
+"""
+    return send_telegram_message(test_msg)
 
 # ==========================================
-# 🕒 KIỂM TRA TRẠNG THÁI THỊ TRƯỜNG
+# 🕒 KIỂM TRA THỊ TRƯỜNG MỞ/ĐÓNG CỬA
 # ==========================================
 def is_market_open():
     now = datetime.now()
-    weekday = now.weekday()
+    weekday = now.weekday()  # 0=Thứ 2, 4=Thứ 6, 5=Thứ 7, 6=Chủ Nhật
     hour = now.hour
     minute = now.minute
-    if weekday >= 5:
+    
+    if weekday >= 5:  # Thứ 7, Chủ Nhật
         return False, "🔒 CUỐI TUẦN - THỊ TRƯỜNG ĐÓNG CỬA"
-    morning = (hour == 9) or (hour == 10) or (hour == 11 and minute < 30)
-    afternoon = (hour == 13) or (hour == 14) or (hour == 15 and minute == 0)
-    if morning or afternoon:
+    
+    # Phiên sáng: 9:00 - 11:30
+    morning_session = (hour == 9) or (hour == 10) or (hour == 11 and minute < 30)
+    # Phiên chiều: 13:00 - 15:00
+    afternoon_session = (hour >= 13 and hour < 15)
+    
+    if morning_session or afternoon_session:
         return True, "🟢 ĐANG MỞ CỬA"
     else:
         return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY DỮ LIỆU — 3 NGUỒN + TỰ ĐỘNG CẬP NHẬT
+# 📊 LẤY DỮ LIỆU GIÁ TỪ CÁC NGUỒN
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
     print(f"\n🔄 [{datetime.now().strftime('%H:%M:%S')}] Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'}")
     
-    # ==========================================
-    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ PHIÊN CUỐI ĐÃ LƯU
-    # ==========================================
+    # Nếu đóng cửa → dùng giá đã lưu
     if not is_market_open_now:
         if symbol in last_known_data:
             cached = last_known_data[symbol]
-            print(f"   🔒 DÙNG GIÁ PHIÊN CUỐI đã lưu lúc: {cached['saved_at']}")
-            print(f"      → {symbol}: {cached['price']:,.0f} VNĐ | {cached['change_pct']:+.2f}%")
+            print(f"   🔒 Sử dụng giá phiên cuối: {cached['saved_at']}")
             return {
                 "price": cached["price"],
                 "change": cached["change"],
                 "change_pct": cached["change_pct"],
                 "source": f"🔒 Giá phiên cuối (lưu lúc {cached['saved_at']})"
             }
-        else:
-            print(f"   ❌ Chưa có dữ liệu nào được lưu cho {symbol}")
-            return None
+        return None
     
-    # ==========================================
-    # 🟢 KHI MỞ CỬA → GỌI API LẤY GIÁ MỚI + CẬP NHẬT
-    # ==========================================
+    # Mở cửa → gọi API lấy giá mới
     data = None
     
-    # NGUỒN 1: API SSI Securities
+    # Nguồn 1: SSI
     try:
         url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
             res = r.json()
@@ -146,13 +176,13 @@ def get_stock_data(symbol, is_market_open_now):
                     data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 SSI — GIÁ MỚI"}
                     print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
     except Exception as e:
-        print(f"   ⚠️ API SSI lỗi: {e}")
+        print(f"   ⚠️ SSI lỗi: {e}")
     
-    # NGUỒN 2: API DNSE / Entrade
+    # Nguồn 2: DNSE
     if data is None:
         try:
             url = f"https://services.entrade.com.vn/entrade-api/quote/ticker?symbol={symbol}"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            headers = {"User-Agent": "Mozilla/5.0"}
             r = requests.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
                 res = r.json()
@@ -164,16 +194,13 @@ def get_stock_data(symbol, is_market_open_now):
                         data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 DNSE — GIÁ MỚI"}
                         print(f"   ✅ [DNSE] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
         except Exception as e:
-            print(f"   ⚠️ API DNSE lỗi: {e}")
+            print(f"   ⚠️ DNSE lỗi: {e}")
     
-    # NGUỒN 3: API CAFEF
+    # Nguồn 3: CafeF
     if data is None:
         try:
             url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://cafef.vn/"
-            }
+            headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://cafef.vn/"}
             r = requests.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
                 res = r.json()
@@ -185,11 +212,9 @@ def get_stock_data(symbol, is_market_open_now):
                         data = {"price": price, "change": change, "change_pct": change_pct, "source": "🟢 CafeF — GIÁ MỚI"}
                         print(f"   ✅ [CafeF] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
         except Exception as e:
-            print(f"   ⚠️ API CafeF lỗi: {e}")
+            print(f"   ⚠️ CafeF lỗi: {e}")
     
-    # ==========================================
-    # 💾 LƯU GIÁ MỚI NHẤT — CẬP NHẬT THAY THẾ GIÁ CŨ
-    # ==========================================
+    # Lưu giá mới nếu lấy được
     if data is not None:
         last_known_data[symbol] = {
             "price": data["price"],
@@ -197,11 +222,11 @@ def get_stock_data(symbol, is_market_open_now):
             "change_pct": data["change_pct"],
             "saved_at": datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         }
-        print(f"   💾 CẬP NHẬT MỚI — Giá {symbol} đã lưu lúc: {last_known_data[symbol]['saved_at']}")
+        print(f"   💾 Đã lưu giá mới cho {symbol}")
         return data
     
-    # ❌ Không lấy được dữ liệu mới → dùng giá cũ đã lưu
-    print(f"   ⚠️ Không lấy được giá mới cho {symbol} → dùng giá phiên cuối đã lưu")
+    # Không lấy được mới → dùng giá cũ
+    print(f"   ⚠️ Không lấy được giá mới → dùng giá phiên cuối")
     cached = last_known_data[symbol]
     return {
         "price": cached["price"],
@@ -211,12 +236,12 @@ def get_stock_data(symbol, is_market_open_now):
     }
 
 # ==========================================
-# 📈 TÍNH CHỈ SỐ KỸ THUẬT + KHỔUYẾN NGHỊ MUA/BÁN
+# 📈 TÍNH CHỈ SỐ & TẠO KHUYẾN NGHỊ
 # ==========================================
 def calculate_indicators(symbol, price_data):
     current_price = price_data["price"]
     
-    # Lưu giá vào lịch sử
+    # Thêm giá mới vào lịch sử
     if symbol not in price_history:
         price_history[symbol] = []
     price_history[symbol].append(current_price)
@@ -230,62 +255,58 @@ def calculate_indicators(symbol, price_data):
     ma10 = round(sum(history[-10:]) / 10, 0) if len(history) >= 10 else round(current_price * 0.99, 0)
     
     # Tính RSI
+    rsi = 50.0
     if len(history) >= 5:
         gains = []
         losses = []
-        period = min(14, len(history))
-        for i in range(1, period):
+        for i in range(1, min(14, len(history))):
             diff = history[i] - history[i-1]
             if diff > 0:
                 gains.append(diff)
             else:
                 losses.append(abs(diff))
-        
         avg_gain = sum(gains) / len(gains) if gains else 0
         avg_loss = sum(losses) / len(losses) if losses else 0
-        
         if avg_loss == 0:
             rsi = 100.0 if avg_gain > 0 else 50.0
         else:
-            rsi = round(100 - (100 / (1 + avg_gain / avg_loss)), 1)
-    else:
-        rsi = 50.0
+            rs = avg_gain / avg_loss
+            rsi = round(100 - (100 / (1 + rs)), 1)
     
-    # Tính Hỗ trợ, Kháng cự
+    # Tính hỗ trợ, kháng cự
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # 🔴 XÁC ĐỊNH TÍN HIỆU MUA / BÁN / NẮM GIỮ
-    signals = []
+    # Tín hiệu MUA
     if current_price < ma5 and current_price < support:
-        signals.append("🟢 TÍN HIỆU MUA MẠNH")
-        mua_text = f"✅ MUA NGAY: Giá {current_price:,.0f} VND — Đã điều chỉnh về vùng hỗ trợ {support:,.0f} VND"
-    elif current_price <= ma5 * 1.01 and current_price >= support * 0.99:
-        signals.append("🟡 TÍN HIỆU MUA CHỜ")
-        mua_text = f"⏸️ MUA: Chờ giá điều chỉnh về {support:,.0f} VND — Giá hiện tại {current_price:,.0f} VND gần hỗ trợ"
+        mua_text = f"✅ <b>MUA NGAY:</b> Giá {current_price:,.0f} VND — Đã điều chỉnh về vùng hỗ trợ {support:,.0f} VND"
+    elif abs(current_price - support) / support < 0.01:
+        mua_text = f"⏸️ <b>MUA CHỜ:</b> Giá {current_price:,.0f} VND gần hỗ trợ {support:,.0f} VND"
     else:
-        mua_text = f"⏸️ MUA: Chờ giá điều chỉnh về {support:,.0f} VND – chưa mở lệnh"
+        mua_text = f"⏸️ <b>MUA:</b> Chờ giá điều chỉnh về {support:,.0f} VND"
     
+    # Tín hiệu BÁN
     if current_price > ma5 and current_price > resistance:
-        signals.append("🔴 TÍN HIỆU BÁN MẠNH")
-        ban_text = f"✅ BÁN NGAY: Giá {current_price:,.0f} VND — Đã chạm vùng kháng cự {resistance:,.0f} VND"
-    elif current_price >= ma5 * 0.99 and current_price <= resistance * 1.01:
-        signals.append("🟡 TÍN HIỆU BÁN CHỜ")
-        ban_text = f"⏸️ BÁN: Chờ giá lên mục tiêu {resistance:,.0f} VND — Giá hiện tại {current_price:,.0f} VND gần kháng cự"
+        ban_text = f"✅ <b>BÁN NGAY:</b> Giá {current_price:,.0f} VND — Đã chạm kháng cự {resistance:,.0f} VND"
+    elif abs(current_price - resistance) / resistance < 0.01:
+        ban_text = f"⏸️ <b>BÁN CHỜ:</b> Giá {current_price:,.0f} VND gần kháng cự {resistance:,.0f} VND"
     else:
-        ban_text = f"⏸️ BÁN: Chờ giá lên mục tiêu {resistance:,.0f} VND – chưa chốt lời"
+        ban_text = f"⏸️ <b>BÁN:</b> Chờ giá lên mục tiêu {resistance:,.0f} VND"
     
-    if ma5 > ma10 and rsi > 50 and current_price > support and current_price < resistance:
-        hold_status = "🟢 NẮM GIỮ — Xu hướng tăng tốt"
+    # Tín hiệu NẮM GIỮ
+    if ma5 > ma10 and rsi > 50 and support < current_price < resistance:
+        hold_status = "🟢 <b>NẮM GIỮ — Xu hướng tăng tốt</b>"
     elif ma5 < ma10 and rsi < 50:
-        hold_status = "🔴 CÂN NHẮC GIẢM TỶ TRỌNG — Xu hướng yếu"
+        hold_status = "🔴 <b>CÂN NHẮC GIẢM TỶ TRỌNG — Xu hướng yếu</b>"
     else:
-        hold_status = "🟡 NẮM GIỮ — Chờ tín hiệu rõ hơn"
+        hold_status = "🟡 <b>NẮM GIỮ — Chờ tín hiệu rõ hơn</b>"
     
-    nam_giu_text = f"{hold_status}\n💰 Giá hiện tại: {current_price:,.0f} VND\n🎯 Mục tiêu bán: {resistance:,.0f} VND\n🛑 Cắt lỗ dưới: {support:,.0f} VND"
+    nam_giu_text = f"""{hold_status}
+💰 Giá hiện tại: <b>{current_price:,.0f} VND</b>
+🎯 Mục tiêu bán: {resistance:,.0f} VND
+🛑 Cắt lỗ dưới: {support:,.0f} VND"""
     
     return {
-        "signals": signals,
         "mua": mua_text,
         "ban": ban_text,
         "nam_giu": nam_giu_text,
@@ -297,117 +318,94 @@ def calculate_indicators(symbol, price_data):
     }
 
 # ==========================================
-# 🚀 BOT CHÍNH — TỰ ĐỘNG ĐỔI TẦN SUẤT THEO THỊ TRƯỜNG
+# 🚀 CHƯƠNG TRÌNH CHÍNH
 # ==========================================
-print("=" * 60)
-print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
-print("=" * 60)
-print("📡 Nguồn dữ liệu: SSI → DNSE → CafeF (3 nguồn thời gian thực)")
-print("⏱️ Mở cửa → Mỗi 5 phút cập nhật giá mới")
-print("⏱️ Đóng cửa → Mỗi 1 giờ dùng giá phiên cuối")
-print("💾 Có sẵn giá phiên cuối — báo cáo ngay cả khi đóng cửa")
-print("💰 Khuyến nghị: Tín hiệu Mua/Bán/Nắm giữ rõ ràng kèm giá")
-print("📊 Theo dõi 3 mã: ACV, FPT, VCB")
-
-if not test_bot_connection():
-    print("\n❌ Sửa lỗi rồi chạy lại!")
-    sys.exit(1)
-
-send_telegram("""🚀 BOT ĐÃ CHẠY 24/7
-Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
-Theo dõi: ACV, FPT, VCB
-
-⏱️ Mở cửa → Báo cáo mỗi 5 phút
-⏱️ Đóng cửa → Báo cáo mỗi 1 giờ
-📡 Nguồn: SSI → DNSE → CafeF
-💰 Khuyến nghị: Mua/Bán/Nắm giữ rõ ràng
-
-Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
-""")
-
-last_weekday = None
-error_count = 0
-
-print("\n🔄 Bắt đầu vòng lặp chính...")
-while True:
-    try:
-        now = datetime.now()
-        weekday = now.weekday()
-        is_open, status_text = is_market_open()
-        
-        # Xác định khoảng thời gian chờ dựa vào trạng thái thị trường
-        current_interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
-        interval_text = "5 phút" if is_open else "1 giờ"
-        
-        if weekday != last_weekday:
-            send_telegram("""🔔 THÔNG BÁO TRẠNG THÁI
-Ngày giờ: """ + now.strftime('%d/%m/%Y %H:%M:%S') + """
-""" + status_text + """
-⏱️ Tần suất báo cáo: """ + interval_text + """
-
-Cảnh báo: Chỉ tham khảo — tự quyết định giao dịch!
-""")
-            last_weekday = weekday
-        
-        print(f"\n{'='*60}")
-        print(f"⏰ [{now.strftime('%d/%m/%Y %H:%M:%S')}] Bắt đầu chu kỳ báo cáo mới")
-        print(f"Trạng thái thị trường: {status_text}")
-        print(f"Tần suất tiếp theo: {interval_text} ({current_interval} giây)")
-        print(f"{'='*60}")
-        
-        full_message = ""
-        has_data = False
-        
-        for symbol in WATCH_LIST:
-            data = get_stock_data(symbol, is_open)
+def main():
+    print("=" * 60)
+    print("🚀 BOT THÔNG BÁO CỔ PHIẾU — CHẠY 24/7")
+    print("=" * 60)
+    print(f"📊 Theo dõi: {', '.join(WATCH_LIST)}")
+    print(f"⏱️ Mở cửa: mỗi {CHECK_INTERVAL_OPEN//60} phút | Đóng cửa: mỗi {CHECK_INTERVAL_CLOSED//60//60} giờ")
+    print("=" * 60)
+    
+    # Kiểm tra kết nối Telegram trước
+    if not test_bot_connection():
+        print("\n❌ Kết nối Telegram thất bại! Vui lòng kiểm tra Token và Chat ID.")
+        sys.exit(1)
+    
+    last_weekday = None
+    
+    # Vòng lặp chính
+    while True:
+        try:
+            now = datetime.now()
+            weekday = now.weekday()
+            is_open, status_text = is_market_open()
             
-            if data is None:
-                full_message += f"""
-——————————————————————
-📊 {symbol} – ❌ KHÔNG CÓ DỮ LIỆU
-Vui lòng thử lại sau.
+            # Chọn tần suất
+            current_interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
+            interval_text = "5 phút" if is_open else "1 giờ"
+            
+            # Thông báo đổi trạng thái thị trường
+            if weekday != last_weekday:
+                notify_msg = f"""🔔 <b>THÔNG BÁO TRẠNG THÁI THỊ TRƯỜNG</b>
+📅 Ngày: {now.strftime('%d/%m/%Y')}
+🕐 Giờ: {now.strftime('%H:%M:%S')}
+{status_text}
+⏱️ Tần suất báo cáo: {interval_text}
 """
-                continue
+                send_telegram_message(notify_msg)
+                last_weekday = weekday
             
-            has_data = True
-            ind = calculate_indicators(symbol, data)
-            change_pct_str = f"{data['change_pct']:+.2f}%"
+            print(f"\n{'='*60}")
+            print(f"⏰ [{now.strftime('%d/%m/%Y %H:%M:%S')}] CHU KỲ MỚI")
+            print(f"Trạng thái: {status_text} | Tần suất: {interval_text}")
+            print(f"{'='*60}")
             
-            signals_text = "\n📊 TÍN HIỆU: " + (" | ".join(ind['signals']) if ind['signals'] else "Không có tín hiệu đặc biệt")
+            # Tạo báo cáo
+            full_message = "<b>📊 BÁO CÁO CỔ PHIẾU</b>\n"
             
-            report = f"""
-——————————————————————
-📊 {symbol} – Giá: {data['price']:,.0f} VND | Thay đổi: {change_pct_str}
+            for symbol in WATCH_LIST:
+                data = get_stock_data(symbol, is_open)
+                if data is None:
+                    full_message += f"\n——————————————————\n📊 {symbol} — ❌ KHÔNG CÓ DỮ LIỆU\n"
+                    continue
+                
+                ind = calculate_indicators(symbol, data)
+                change_pct_str = f"{data['change_pct']:+.2f}%"
+                
+                full_message += f"""
+——————————————————
+📊 <b>{symbol}</b> — Giá: <b>{data['price']:,.0f} VND</b> | {change_pct_str}
 📡 Nguồn: {data['source']}
 📉 MA5: {ind['ma5']:,.0f} | MA10: {ind['ma10']:,.0f} | RSI: {ind['rsi']}
 🛡️ Hỗ trợ: {ind['support']:,.0f} | Kháng cự: {ind['resistance']:,.0f}
-{signals_text}
-🎯 KHUYẾN NGHỊ:
+
+🎯 <b>KHUYẾN NGHỊ:</b>
 {ind['mua']}
 {ind['ban']}
 {ind['nam_giu']}
 """
-            full_message += report
+            
+            full_message += f"\n——————————————————\n⏱️ Báo cáo mỗi {interval_text}\n⚠️ <i>Chỉ tham khảo — tự quyết định giao dịch!</i>"
+            
+            # Gửi báo cáo
+            send_telegram_message(full_message)
+            
+            # Chờ đến lần tiếp theo
+            print(f"\n💤 Ngủ {interval_text} ({current_interval} giây)...")
+            time.sleep(current_interval)
         
-        if not has_data:
-            send_telegram("""
-❌ KHÔNG CÓ DỮ LIỆU
-Vui lòng kiểm tra kết nối và thử lại.
-""")
-        else:
-            full_message += "\n——————————————————————\n⏱️ Báo cáo mỗi " + interval_text + "\n⚠️ Chỉ tham khảo — tự quyết định giao dịch!"
-            send_telegram(full_message)
-        
-        print(f"\n💤 Ngủ {interval_text} ({current_interval} giây) cho đến chu kỳ tiếp theo...")
-        time.sleep(current_interval)
-    
-    except KeyboardInterrupt:
-        print("\n👋 Bot đã được dừng thủ công")
-        send_telegram("🔴 BOT ĐÃ ĐƯỢC DỪNG — Người dùng đã tắt chương trình")
-        sys.exit(0)
-    
-    except Exception as e:
-        error_msg = f"❌ Lỗi hệ thống: {e}"
-        print(f"\n{error_msg}")
-        send_telegram(f"⚠️ CẢNH BÁO: {error_msg}\nBot sẽ tự động thử lại sau {ERROR_WAIT_TIME} giây...")
-        time.sleep(ERROR_WAIT_TIME)
+        except KeyboardInterrupt:
+            print("\n👋 Bot đã dừng bởi người dùng")
+            send_telegram_message("🔴 <b>BOT ĐÃ DỪNG</b> — Người dùng tắt chương trình")
+            sys.exit(0)
+        except Exception as e:
+            error_msg = f"❌ <b>LỖI HỆ THỐNG:</b> {e}"
+            print(f"\n{error_msg}")
+            send_telegram_message(error_msg)
+            print(f"⏳ Thử lại sau {ERROR_WAIT_TIME} giây...")
+            time.sleep(ERROR_WAIT_TIME)
+
+if __name__ == "__main__":
+    main()
