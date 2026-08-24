@@ -1,7 +1,7 @@
 import os
 import time
 import telebot
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask import Flask
 
 BOT_TOKEN = os.environ.get('BOT2_TOKEN')
@@ -99,30 +99,47 @@ def gui():
     bot.send_message(CHAT_ID, text)
     print(f"✅ Đã gửi | {ngay} {thu_hien}")
 
-# ========== TÍNH THỜI GIAN GỬI ==========
-def lay_gui_luc():
-    bây_giờ = datetime.now()
-    gui_luc = bây_giờ.replace(hour=18, minute=35, second=0, microsecond=0)
-    # Nếu đã qua 18:35 thì gửi ngay hôm nay, nếu chưa thì đợi đến 18:35
-    if bây_giờ >= gui_luc:
-        return bây_giờ  # Gửi ngay!
-    return gui_luc
+# ========== KIỂM TRA THỜI GIAN ==========
+def den_gio_chinh_thuc():
+    now = datetime.now()
+    return now.hour == 18 and now.minute == 35
+
+def da_qua_gio():
+    now = datetime.now()
+    return (now.hour == 18 and now.minute > 35) or (now.hour > 18)
+
+def dau_ngay_moi():
+    now = datetime.now()
+    return now.hour == 0 and now.minute == 0
 
 # ========== CHẠY BOT ==========
 def chay():
+    da_gui_chinh_thuc = False
+    
     while True:
-        lan_gui_tiep = lay_gui_luc()
-        doi = (lan_gui_tiep - datetime.now()).total_seconds()
-        if doi > 0:
-            print(f"⏰ Đợi {int(doi)} giây đến {lan_gui_tiep.strftime('%H:%M')}")
-            time.sleep(doi)
+        if dau_ngay_moi():
+            da_gui_chinh_thuc = False
+            global KET_QUA
+            KET_QUA = None
+            print("🔄 Đặt lại cho ngày mới")
+            time.sleep(60)
+            continue
+        
+        if da_qua_gio():
+            if not da_gui_chinh_thuc:
+                gui()
+                da_gui_chinh_thuc = True
+                print("⏹ 18:35 - Đã gửi kết quả chính thức → Dừng gửi")
+            time.sleep(60)
+            continue
+        
         gui()
-        # Đặt lịch cho ngày mai
-        ngày_mai = datetime.now() + timedelta(days=1)
-        gui_luc_mai = ngày_mai.replace(hour=18, minute=35, second=0, microsecond=0)
-        doi_mai = (gui_luc_mai - datetime.now()).total_seconds()
-        print(f"📅 Lịch gửi ngày mai: {gui_luc_mai.strftime('%d/%m %H:%M')} | Đợi {int(doi_mai/3600)} giờ")
-        time.sleep(doi_mai)
+        
+        if den_gio_chinh_thuc():
+            da_gui_chinh_thuc = True
+            print("⏹ Đến 18:35 → Đã gửi kết quả chính thức → Dừng gửi")
+        
+        time.sleep(60)
 
 if __name__ == "__main__":
     from threading import Thread
