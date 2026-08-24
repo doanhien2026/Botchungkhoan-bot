@@ -46,7 +46,7 @@ price_history = {
 }
 
 # ==========================================
-# 🤖 HÀM GỬI TIN NHẮN TELEGRAM — ĐÃ KIỂM TRA
+# 🤖 HÀM GỬI TIN NHẮN TELEGRAM
 # ==========================================
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -86,7 +86,6 @@ def test_bot_connection():
     print("🔍 KIỂM TRA KẾT NỐI BOT TELEGRAM...")
     print("=" * 60)
     
-    # Kiểm tra Token
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
     try:
         resp = requests.get(url, timeout=15)
@@ -103,10 +102,9 @@ def test_bot_connection():
         print(f"❌ Không kết nối được Telegram: {e}")
         return False
     
-    # Gửi tin nhắn kiểm tra
-    test_msg = f"""🚀 <b>BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!</b>
+    test_msg = """🚀 <b>BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!</b>
 
-📅 Ngày giờ: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+📅 Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
 📊 Theo dõi: ACV, FPT, VCB
 
 ⏱️ Mở cửa → Báo cáo mỗi 5 phút
@@ -122,16 +120,14 @@ def test_bot_connection():
 # ==========================================
 def is_market_open():
     now = datetime.now()
-    weekday = now.weekday()  # 0=Thứ 2, 4=Thứ 6, 5=Thứ 7, 6=Chủ Nhật
+    weekday = now.weekday()
     hour = now.hour
     minute = now.minute
     
-    if weekday >= 5:  # Thứ 7, Chủ Nhật
+    if weekday >= 5:
         return False, "🔒 CUỐI TUẦN - THỊ TRƯỜNG ĐÓNG CỬA"
     
-    # Phiên sáng: 9:00 - 11:30
     morning_session = (hour == 9) or (hour == 10) or (hour == 11 and minute < 30)
-    # Phiên chiều: 13:00 - 15:00
     afternoon_session = (hour >= 13 and hour < 15)
     
     if morning_session or afternoon_session:
@@ -145,7 +141,6 @@ def is_market_open():
 def get_stock_data(symbol, is_market_open_now):
     print(f"\n🔄 [{datetime.now().strftime('%H:%M:%S')}] Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'}")
     
-    # Nếu đóng cửa → dùng giá đã lưu
     if not is_market_open_now:
         if symbol in last_known_data:
             cached = last_known_data[symbol]
@@ -158,7 +153,6 @@ def get_stock_data(symbol, is_market_open_now):
             }
         return None
     
-    # Mở cửa → gọi API lấy giá mới
     data = None
     
     # Nguồn 1: SSI
@@ -214,7 +208,6 @@ def get_stock_data(symbol, is_market_open_now):
         except Exception as e:
             print(f"   ⚠️ CafeF lỗi: {e}")
     
-    # Lưu giá mới nếu lấy được
     if data is not None:
         last_known_data[symbol] = {
             "price": data["price"],
@@ -225,7 +218,6 @@ def get_stock_data(symbol, is_market_open_now):
         print(f"   💾 Đã lưu giá mới cho {symbol}")
         return data
     
-    # Không lấy được mới → dùng giá cũ
     print(f"   ⚠️ Không lấy được giá mới → dùng giá phiên cuối")
     cached = last_known_data[symbol]
     return {
@@ -241,7 +233,6 @@ def get_stock_data(symbol, is_market_open_now):
 def calculate_indicators(symbol, price_data):
     current_price = price_data["price"]
     
-    # Thêm giá mới vào lịch sử
     if symbol not in price_history:
         price_history[symbol] = []
     price_history[symbol].append(current_price)
@@ -250,11 +241,9 @@ def calculate_indicators(symbol, price_data):
     
     history = price_history[symbol]
     
-    # Tính MA5, MA10
     ma5 = round(sum(history[-5:]) / 5, 0) if len(history) >= 5 else round(current_price * 0.995, 0)
     ma10 = round(sum(history[-10:]) / 10, 0) if len(history) >= 10 else round(current_price * 0.99, 0)
     
-    # Tính RSI
     rsi = 50.0
     if len(history) >= 5:
         gains = []
@@ -273,11 +262,9 @@ def calculate_indicators(symbol, price_data):
             rs = avg_gain / avg_loss
             rsi = round(100 - (100 / (1 + rs)), 1)
     
-    # Tính hỗ trợ, kháng cự
     support = round(min(history[-10:]) * 0.995, 0) if len(history) >= 10 else round(current_price * 0.97, 0)
     resistance = round(max(history[-10:]) * 1.005, 0) if len(history) >= 10 else round(current_price * 1.03, 0)
     
-    # Tín hiệu MUA
     if current_price < ma5 and current_price < support:
         mua_text = f"✅ <b>MUA NGAY:</b> Giá {current_price:,.0f} VND — Đã điều chỉnh về vùng hỗ trợ {support:,.0f} VND"
     elif abs(current_price - support) / support < 0.01:
@@ -285,7 +272,6 @@ def calculate_indicators(symbol, price_data):
     else:
         mua_text = f"⏸️ <b>MUA:</b> Chờ giá điều chỉnh về {support:,.0f} VND"
     
-    # Tín hiệu BÁN
     if current_price > ma5 and current_price > resistance:
         ban_text = f"✅ <b>BÁN NGAY:</b> Giá {current_price:,.0f} VND — Đã chạm kháng cự {resistance:,.0f} VND"
     elif abs(current_price - resistance) / resistance < 0.01:
@@ -293,7 +279,6 @@ def calculate_indicators(symbol, price_data):
     else:
         ban_text = f"⏸️ <b>BÁN:</b> Chờ giá lên mục tiêu {resistance:,.0f} VND"
     
-    # Tín hiệu NẮM GIỮ
     if ma5 > ma10 and rsi > 50 and support < current_price < resistance:
         hold_status = "🟢 <b>NẮM GIỮ — Xu hướng tăng tốt</b>"
     elif ma5 < ma10 and rsi < 50:
@@ -328,25 +313,21 @@ def main():
     print(f"⏱️ Mở cửa: mỗi {CHECK_INTERVAL_OPEN//60} phút | Đóng cửa: mỗi {CHECK_INTERVAL_CLOSED//60//60} giờ")
     print("=" * 60)
     
-    # Kiểm tra kết nối Telegram trước
     if not test_bot_connection():
         print("\n❌ Kết nối Telegram thất bại! Vui lòng kiểm tra Token và Chat ID.")
         sys.exit(1)
     
     last_weekday = None
     
-    # Vòng lặp chính
     while True:
         try:
             now = datetime.now()
             weekday = now.weekday()
             is_open, status_text = is_market_open()
             
-            # Chọn tần suất
             current_interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
             interval_text = "5 phút" if is_open else "1 giờ"
             
-            # Thông báo đổi trạng thái thị trường
             if weekday != last_weekday:
                 notify_msg = f"""🔔 <b>THÔNG BÁO TRẠNG THÁI THỊ TRƯỜNG</b>
 📅 Ngày: {now.strftime('%d/%m/%Y')}
@@ -362,7 +343,6 @@ def main():
             print(f"Trạng thái: {status_text} | Tần suất: {interval_text}")
             print(f"{'='*60}")
             
-            # Tạo báo cáo
             full_message = "<b>📊 BÁO CÁO CỔ PHIẾU</b>\n"
             
             for symbol in WATCH_LIST:
@@ -389,10 +369,8 @@ def main():
             
             full_message += f"\n——————————————————\n⏱️ Báo cáo mỗi {interval_text}\n⚠️ <i>Chỉ tham khảo — tự quyết định giao dịch!</i>"
             
-            # Gửi báo cáo
             send_telegram_message(full_message)
             
-            # Chờ đến lần tiếp theo
             print(f"\n💤 Ngủ {interval_text} ({current_interval} giây)...")
             time.sleep(current_interval)
         
