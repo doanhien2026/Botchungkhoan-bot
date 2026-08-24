@@ -1,7 +1,7 @@
 import os
 import time
 import telebot
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask
 
 BOT_TOKEN = os.environ.get('BOT2_TOKEN')
@@ -13,7 +13,7 @@ app = Flask(__name__)
 KET_QUA = None
 TONG_NGAY = 60
 
-# ========== DỮ LIỆU THỰC TẾ 60 NGÀY ==========
+# ========== DỮ LIỆU THỐNG KÊ ==========
 TAN_SUAT_LAN = {
     '03':14,'25':12,'00':11,'73':10,'56':9,'12':9,'48':8,'89':8,
     '37':7,'61':7,'15':6,'28':6,'42':5,'59':5,'83':5,'07':4,'19':4,
@@ -36,17 +36,12 @@ PHAN_BO_THU = {
     '5':[2,2,2,2,2,2,0],'0':[2,2,2,1,2,1,1],'7':[1,2,1,2,2,1,1]
 }
 
-# ========== TỶ LỆ TRÚNG THỰC TẾ (kiểm tra 60 ngày) ==========
 TY_LE_TRUNG = {
-    'lo1': '18%',
-    'lo2': '15%',
-    'lo3': '13%',
-    'xien1': '17%',
-    'xien2': '12%',
-    'sc': '35%'
+    'lo1': '18%', 'lo2': '15%', 'lo3': '13%',
+    'xien1': '17%', 'xien2': '12%', 'sc': '35%'
 }
 
-# ========== TÍNH TOÁN CHẶT CHẼ ==========
+# ========== TÍNH THÔNG TIN ==========
 def tinh_thong_tin(so, thu_hien_tai):
     ts_lan = TAN_SUAT_LAN.get(so, 0)
     ts_pt = round((ts_lan / TONG_NGAY) * 100, 1)
@@ -61,13 +56,7 @@ def tinh_thong_tin(so, thu_hien_tai):
             diem_th = round(min(ty_le_thu * 20, 10), 1)
     
     tong_diem = round((ts_pt * 0.6) + (min(ck_nghi * 2, 30) * 0.3) + (diem_th * 0.1), 2)
-    
-    return {
-        'so': so,
-        'ts_pt': ts_pt,
-        'ck_nghi': ck_nghi,
-        'tong_diem': tong_diem
-    }
+    return {'so': so, 'ts_pt': ts_pt, 'ck_nghi': ck_nghi, 'tong_diem': tong_diem}
 
 def tinh_toan():
     thu = datetime.now().weekday()
@@ -75,12 +64,9 @@ def tinh_toan():
                    key=lambda x:x['tong_diem'], reverse=True)
     ds_sc = sorted([tinh_thong_tin(s, thu) for s in '0123456789'],
                    key=lambda x:x['tong_diem'], reverse=True)
-    return {
-        'lo3': ds_lo[:3],
-        'xien2': ds_lo[3:5],
-        'sc1': ds_sc[:1]
-    }
+    return {'lo3': ds_lo[:3], 'xien2': ds_lo[3:5], 'sc1': ds_sc[:1]}
 
+# ========== GỬI TIN NHẮN ==========
 def gui():
     global KET_QUA
     if KET_QUA is None:
@@ -111,13 +97,32 @@ def gui():
 🎲 Chơi có trách nhiệm - Chỉ giải trí!
 """
     bot.send_message(CHAT_ID, text)
-    print(f"✅ Đã gửi | Logic chặt chẽ - kiểm tra 60 ngày | Tỷ lệ thực tế: Số cuối 35%, Lô 13-18%")
+    print(f"✅ Đã gửi | {ngay} {thu_hien}")
 
+# ========== TÍNH THỜI GIAN GỬI ==========
+def lay_gui_luc():
+    bây_giờ = datetime.now()
+    gui_luc = bây_giờ.replace(hour=18, minute=35, second=0, microsecond=0)
+    # Nếu đã qua 18:35 thì gửi ngay hôm nay, nếu chưa thì đợi đến 18:35
+    if bây_giờ >= gui_luc:
+        return bây_giờ  # Gửi ngay!
+    return gui_luc
+
+# ========== CHẠY BOT ==========
 def chay():
-    gui()
     while True:
-        time.sleep(60)
+        lan_gui_tiep = lay_gui_luc()
+        doi = (lan_gui_tiep - datetime.now()).total_seconds()
+        if doi > 0:
+            print(f"⏰ Đợi {int(doi)} giây đến {lan_gui_tiep.strftime('%H:%M')}")
+            time.sleep(doi)
         gui()
+        # Đặt lịch cho ngày mai
+        ngày_mai = datetime.now() + timedelta(days=1)
+        gui_luc_mai = ngày_mai.replace(hour=18, minute=35, second=0, microsecond=0)
+        doi_mai = (gui_luc_mai - datetime.now()).total_seconds()
+        print(f"📅 Lịch gửi ngày mai: {gui_luc_mai.strftime('%d/%m %H:%M')} | Đợi {int(doi_mai/3600)} giờ")
+        time.sleep(doi_mai)
 
 if __name__ == "__main__":
     from threading import Thread
