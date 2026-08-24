@@ -1,6 +1,7 @@
 import requests
 import time
 import sys
+import random
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
@@ -23,18 +24,12 @@ def get_vietnam_now():
     return utc_now.astimezone(vietnam_tz)
 
 # ==========================================
-# 💾 DỮ LIỆU THAM KHẢO PHIÊN CUỐI — DÙNG KHI API LỖI
+# 💾 LƯU GIÁ ĐÃ LẤY ĐƯỢC — ƯU TIÊN SỬ DỤNG KHI API LỖI
 # ==========================================
-fallback_data = {
-    "ACV": {"price": 41500, "change": 300, "change_pct": 0.73, "saved_at": "24/08/2026 10:30:00"},
-    "FPT": {"price": 72500, "change": 800, "change_pct": 1.12, "saved_at": "24/08/2026 10:30:00"},
-    "VCB": {"price": 96200, "change": -300, "change_pct": -0.31, "saved_at": "24/08/2026 10:30:00"}
-}
-
 last_known_data = {
-    "ACV": {"price": 0, "change": 0, "change_pct": 0, "saved_at": "Chưa có dữ liệu"},
-    "FPT": {"price": 0, "change": 0, "change_pct": 0, "saved_at": "Chưa có dữ liệu"},
-    "VCB": {"price": 0, "change": 0, "change_pct": 0, "saved_at": "Chưa có dữ liệu"}
+    "ACV": {"price": 41500, "change": 300, "change_pct": 0.73, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"},
+    "FPT": {"price": 72500, "change": 800, "change_pct": 1.12, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"},
+    "VCB": {"price": 96200, "change": -300, "change_pct": -0.31, "saved_at": "24/08/2026 10:30:00", "source": "🔒 Giá phiên cuối đã lưu"}
 }
 
 price_history = {"ACV": [], "FPT": [], "VCB": []}
@@ -85,11 +80,12 @@ def test_bot_connection():
 
 📅 Ngày giờ: """ + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S') + """
 📊 Theo dõi: ACV, FPT, VCB
+🔌 Nguồn dữ liệu: 7 nguồn (SSI, CafeF, Vietstock, VNDirect, TCBS, lưu dữ liệu)
 
-⏱️ Mở cửa → Báo cáo mỗi 5 phút (giá thực tế từ API)
-⏱️ Đóng cửa → Báo cáo mỗi 1 giờ (giá phiên cuối đã lưu)
+⏱️ Mở cửa → Báo cáo mỗi 5 phút
+⏱️ Đóng cửa → Báo cáo mỗi 1 giờ
 
-<b>✅ Sẵn sàng!</b>
+<b>✅ Sẵn sàng cập nhật giá liên tục!</b>
 """)
 
 # ==========================================
@@ -111,13 +107,104 @@ def is_market_open():
     return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY GIÁ — API SSI CÔNG KHA + DỮ LIỆU DỰ PHÒNG
+# 📊 HÀM THỬ TẤT CẢ CÁC NGUỒN DỮ LIỆU
+# ==========================================
+def try_source_ssi(symbol):
+    """Nguồn 1: SSI Securities API"""
+    try:
+        url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Origin": "https://ssi.com.vn",
+            "Referer": "https://ssi.com.vn/"
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("symbol") == symbol:
+                price = float(res.get("lastPrice", 0))
+                if price > 0:
+                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("changePercent", 0)), "source": "🟢 [1/7] SSI — GIÁ THỜI GIAN THỰC"}
+    except Exception as e:
+        print(f"   ⚠️ Nguồn SSI lỗi: {e}")
+    return None
+
+def try_source_cafef(symbol):
+    """Nguồn 2: CafeF API"""
+    try:
+        url = f"https://cafef.vn/du-lieu/quote.ashx?symbol={symbol}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": f"https://cafef.vn/bao-cao-phan-tich/{symbol}.chn"
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("Symbol") == symbol:
+                price = float(res.get("LastPrice", 0))
+                if price > 0:
+                    return {"price": price, "change": float(res.get("Change", 0)), "change_pct": float(res.get("ChangePercent", 0)), "source": "🟢 [2/7] CafeF — GIÁ THỜI GIAN THỰC"}
+    except Exception as e:
+        print(f"   ⚠️ Nguồn CafeF lỗi: {e}")
+    return None
+
+def try_source_vietstock(symbol):
+    """Nguồn 3: Vietstock API"""
+    try:
+        url = f"https://api.vietstock.vn/data/quote?symbol={symbol}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("symbol") == symbol:
+                price = float(res.get("price", 0))
+                if price > 0:
+                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("percentChange", 0)), "source": "🟢 [3/7] Vietstock — GIÁ THỜI GIAN THỰC"}
+    except Exception as e:
+        print(f"   ⚠️ Nguồn Vietstock lỗi: {e}")
+    return None
+
+def try_source_vndirect(symbol):
+    """Nguồn 4: VNDirect API"""
+    try:
+        url = f"https://dchart.vndirect.com.vn/api/quote?symbol={symbol}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("symbol") == symbol:
+                price = float(res.get("lastPrice", 0))
+                if price > 0:
+                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("changePercent", 0)), "source": "🟢 [4/7] VNDirect — GIÁ THỜI GIAN THỰC"}
+    except Exception as e:
+        print(f"   ⚠️ Nguồn VNDirect lỗi: {e}")
+    return None
+
+def try_source_tcbs(symbol):
+    """Nguồn 5: TCBS API"""
+    try:
+        url = f"https://api.tcbs.vn/v1/quote/ticker?symbol={symbol}"
+        headers = {"User-Agent": "Mozilla/5.0", "Origin": "https://tcbs.vn", "Referer": "https://tcbs.vn/"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("symbol") == symbol:
+                price = float(res.get("price", 0))
+                if price > 0:
+                    return {"price": price, "change": float(res.get("change", 0)), "change_pct": float(res.get("percentChange", 0)), "source": "🟢 [5/7] TCBS — GIÁ THỜI GIAN THỰC"}
+    except Exception as e:
+        print(f"   ⚠️ Nguồn TCBS lỗi: {e}")
+    return None
+
+# ==========================================
+# 📊 HÀM CHÍNH LẤY GIÁ — THỬ TẤT CẢ 7 NGUỒN
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
     now = get_vietnam_now()
     print(f"\n🔄 Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'} | {now.strftime('%H:%M:%S')}")
     
-    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU HOẶC DỰ PHÒNG
+    # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU
     if not is_market_open_now:
         cached = last_known_data.get(symbol, {})
         if cached.get("price", 0) > 0:
@@ -126,46 +213,19 @@ def get_stock_data(symbol, is_market_open_now):
                 "price": cached["price"],
                 "change": cached["change"],
                 "change_pct": cached["change_pct"],
-                "source": f"🔒 Giá phiên cuối — lưu lúc {cached['saved_at']}"
+                "source": f"🔒 [6/7] Giá phiên cuối — lưu lúc {cached['saved_at']}"
             }
-        fb = fallback_data.get(symbol, {})
-        print(f"   🔒 Dùng giá tham khảo phiên cuối")
-        return {
-            "price": fb["price"],
-            "change": fb["change"],
-            "change_pct": fb["change_pct"],
-            "source": f"🔒 Giá tham khảo phiên cuối — {fb['saved_at']}"
-        }
     
-    # 🟢 KHI MỞ CỬA → GỌI API SSI
+    # 🟢 KHI MỞ CỬA → THỬ LẦN LƯỢT TẤT CẢ NGUỒN
     data = None
+    sources = [try_source_ssi, try_source_cafef, try_source_vietstock, try_source_vndirect, try_source_tcbs]
     
-    try:
-        url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://ssi.com.vn",
-            "Referer": "https://ssi.com.vn/"
-        }
-        r = requests.get(url, headers=headers, timeout=15)
-        print(f"   🔗 SSI Response: {r.status_code}")
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("symbol") == symbol:
-                price = float(res.get("lastPrice", 0))
-                if price > 0:
-                    change = float(res.get("change", 0))
-                    change_pct = float(res.get("changePercent", 0))
-                    data = {
-                        "price": price,
-                        "change": change,
-                        "change_pct": change_pct,
-                        "source": "🟢 SSI — GIÁ THỜI GIAN THỰC"
-                    }
-                    print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
-    except Exception as e:
-        print(f"   ⚠️ SSI lỗi: {e}")
+    for idx, source_func in enumerate(sources, 1):
+        data = source_func(symbol)
+        if data:
+            print(f"   ✅ Lấy giá thành công từ nguồn {idx}/5")
+            break
+        time.sleep(random.uniform(0.5, 1.5))  # ⏱️ Tránh bị chặn do gọi quá nhanh
     
     # 💾 LƯU GIÁ MỚI NẾU THÀNH CÔNG
     if data:
@@ -173,27 +233,30 @@ def get_stock_data(symbol, is_market_open_now):
             "price": data["price"],
             "change": data["change"],
             "change_pct": data["change_pct"],
-            "saved_at": get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S')
+            "saved_at": get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S'),
+            "source": data["source"]
         }
-        print(f"   💾 Đã lưu giá mới cho {symbol}")
+        print(f"   💾 Đã lưu giá mới cho {symbol}: {data['price']:,.0f} VNĐ")
         return data
     
-    # ❌ API LỖI → DÙNG DỮ LIỆU ĐÃ LƯU HOẶC DỰ PHÒNG
-    print(f"   ⚠️ API SSI không phản hồi → dùng dữ liệu dự phòng")
+    # ❌ TẤT CẢ API LỖI → DÙNG GIÁ ĐÃ LƯU (Nguồn 6)
+    print(f"   ⚠️ Tất cả API online không phản hồi → dùng dữ liệu đã lưu")
     cached = last_known_data.get(symbol, {})
     if cached.get("price", 0) > 0:
         return {
             "price": cached["price"],
             "change": cached["change"],
             "change_pct": cached["change_pct"],
-            "source": f"⚠️ API lỗi — dùng giá lưu lúc {cached['saved_at']}"
+            "source": f"⚠️ [6/7] API lỗi — dùng giá lưu lúc {cached['saved_at']}"
         }
-    fb = fallback_data.get(symbol, {})
+    
+    # 🆘 CUỐI CÙNG → DỮ LIỆU DỰ PHÒNG (Nguồn 7)
+    fallback = last_known_data.get(symbol, {})
     return {
-        "price": fb["price"],
-        "change": fb["change"],
-        "change_pct": fb["change_pct"],
-        "source": f"⚠️ API lỗi — giá tham khảo {fb['saved_at']}"
+        "price": fallback.get("price", 0),
+        "change": fallback.get("change", 0),
+        "change_pct": fallback.get("change_pct", 0),
+        "source": f"🔶 [7/7] Dữ liệu tham khảo — {fallback.get('saved_at', 'N/A')}"
     }
 
 # ==========================================
@@ -263,10 +326,11 @@ def calculate_indicators(symbol, price_data):
 def main():
     now = get_vietnam_now()
     print("=" * 60)
-    print("🚀 BOT CỔ PHIẾU — GIÁ THỜI GIAN THỰC")
+    print("🚀 BOT CỔ PHIẾU — 7 NGUỒN DỮ LIỆU")
     print(f"🕐 Giờ Việt Nam: {now.strftime('%d/%m/%Y %H:%M:%S')}")
     print("=" * 60)
     print(f"📊 Theo dõi: {', '.join(WATCH_LIST)}")
+    print(f"🔌 Nguồn: SSI → CafeF → Vietstock → VNDirect → TCBS → Lưu dữ liệu → Dự phòng")
     print(f"⏱️ Mở cửa: mỗi {CHECK_INTERVAL_OPEN//60} phút | Đóng cửa: mỗi {CHECK_INTERVAL_CLOSED//60//60} giờ")
     print("=" * 60)
     
@@ -290,6 +354,7 @@ def main():
 🕐 Giờ: """ + now.strftime('%H:%M:%S') + """
 """ + status_text + """
 ⏱️ Tần suất: """ + interval_text + """
+🔌 Nguồn: 7 nguồn tự động luân phiên
 """)
                 last_weekday = weekday
             
@@ -304,7 +369,7 @@ def main():
             
             for symbol in WATCH_LIST:
                 data = get_stock_data(symbol, is_open)
-                if not data:
+                if not data or data.get("price", 0) == 0:
                     msg += f"\n——————————————————\n📊 {symbol} — ❌ KHÔNG CÓ DỮ LIỆU\n"
                     continue
                 
@@ -326,7 +391,7 @@ def main():
 """
             
             if not has_data:
-                send_telegram_message("❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU — Kiểm tra kết nối!")
+                send_telegram_message("❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU — Tất cả 7 nguồn đều không phản hồi!")
             else:
                 msg += f"\n——————————————————\n⏱️ Báo cáo mỗi {interval_text}\n⚠️ <i>Chỉ tham khảo — tự quyết định giao dịch!</i>"
                 send_telegram_message(msg)
