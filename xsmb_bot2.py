@@ -1,35 +1,56 @@
-import os
+# ============================================================
+# XSMB TELEGRAM BOT - V3
+# ============================================================
+#
+# LUỒNG:
+#
+# 18:35  -> lấy kết quả ngày D + gửi Telegram
+# 19:00  -> phân tích 60 ngày + backtest -> khóa tín hiệu D+1
+# 19:05  -> gửi lại tín hiệu đã khóa
+# 19:10  -> gửi lại tín hiệu đã khóa
+# ...
+# mỗi 5 phút gửi đúng MỘT bộ số
+#
+# Ngày D+1:
+# 18:35 -> lấy kết quả D+1 + chấm tín hiệu D+1
+# 19:00 -> tạo tín hiệu D+2
+#
+# ============================================================
+
+import re
+import time
 import sqlite3
 import logging
 from datetime import datetime, timedelta
 from itertools import combinations
 
-import pandas as pd
-import numpy as np
 import requests
+from bs4 import BeautifulSoup
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 # ============================================================
-# CONFIG
+# CẤU HÌNH
 # ============================================================
 
-BOT_TOKEN = os.getenv(
-    "TELEGRAM_BOT_TOKEN",
-    "DAN_BOT_TOKEN_VAO_DAY"
-)
+BOT_TOKEN = "DAN_BOT_TOKEN_CUA_ANH_VAO_DAY"
+CHAT_ID = "DAN_CHAT_ID_KENH_TELEGRAM_VAO_DAY"
 
-CHAT_ID = os.getenv(
-    "TELEGRAM_CHAT_ID",
-    "DAN_CHAT_ID_VAO_DAY"
-)
+SOURCE_URL = "https://xsmb.com.vn/so-ket-qua-xsmb-60-ngay"
 
-DATA_FILE = "xsmb.csv"
 DB_FILE = "xsmb_bot.db"
 
 LOOKBACK = 60
 
 TIMEZONE = "Asia/Ho_Chi_Minh"
+
+HEADERS = {
+    "User-Agent":
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "Chrome/131.0 Safari/537.36"
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,78 +59,36 @@ logging.basicConfig(
 
 
 # ============================================================
-# DATABASE
-# ============================================================
-
-def db():
-
-    return sqlite3.connect(DB_FILE)
-
-
-def init_db():
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS locked_signal (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        target_date TEXT UNIQUE,
-
-        loto1 TEXT,
-        loto2 TEXT,
-        loto3 TEXT,
-
-        xien1 TEXT,
-        xien2 TEXT,
-
-        dau_de TEXT,
-
-        created_at TEXT
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS sent_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        target_date TEXT,
-        sent_at TEXT
-    )
-    """)
-
-    con.commit()
-    con.close()
-
-
-# ============================================================
 # TELEGRAM
 # ============================================================
 
-def telegram(message):
+def send_telegram(message):
 
     url = (
         f"https://api.telegram.org/"
         f"bot{BOT_TOKEN}/sendMessage"
     )
 
-    payload = {
+    data = {
         "chat_id": CHAT_ID,
         "text": message,
-        "parse_mode": "HTML"
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
     }
 
     try:
 
-        r = requests.post(
+        response = requests.post(
             url,
-            json=payload,
-            timeout=15
+            json=data,
+            timeout=20
         )
 
-        if r.status_code != 200:
+        if response.status_code != 200:
 
             logging.error(
-                f"Telegram error: {r.text}"
+                "Telegram lỗi: %s",
+                response.text
             )
 
             return False
@@ -118,39 +97,111 @@ def telegram(message):
 
     except Exception as e:
 
-        logging.error(e)
+        logging.error(
+            "Telegram exception: %s",
+            e
+        )
 
         return False
 
 
 # ============================================================
-# LOAD DATA
+# DATABASE
 # ============================================================
 
-def load_data():
+def get_db():
 
-    df = pd.read_csv(DATA_FILE)
+    return sqlite3.connect(DB_FILE)
 
-    df["date"] = pd.to_datetime(
-        df["date"]
-    )
 
-    df = df.sort_values(
-        "date"
-    ).reset_index(drop=True)
+def init_database():
 
-    return df
+    con = get_db()
+
+    cur = con.cursor()
+
+    # --------------------------------------------------------
+    # KẾT QUẢ XSMB
+    # --------------------------------------------------------
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS results (
+
+            date TEXT PRIMARY KEY,
+
+            db TEXT,
+
+            all_numbers TEXT,
+
+            imported_at TEXT
+        )
+    """)
+
+    # --------------------------------------------------------
+    # TÍN HIỆU ĐÃ KHÓA
+    # --------------------------------------------------------
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS signals (
+
+            target_date TEXT PRIMARY KEY,
+
+            loto1 TEXT,
+            loto2 TEXT,
+            loto3 TEXT,
+
+            xien1 TEXT,
+            xien2 TEXT,
+
+            dau TEXT,
+
+            created_at TEXT,
+
+            backtest_loto_rate REAL,
+            backtest_xien_rate REAL,
+            backtest_dau_rate REAL
+        )
+    """)
+
+    # --------------------------------------------------------
+    # KẾT QUẢ BACKTEST
+    # --------------------------------------------------------
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS backtest (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            target_date TEXT,
+
+            loto1 TEXT,
+            loto2 TEXT,
+            loto3 TEXT,
+
+            xien1 TEXT,
+            xien2 TEXT,
+
+            dau TEXT,
+
+            loto_hit INTEGER,
+            xien_hit INTEGER,
+            dau_hit INTEGER
+        )
+    """)
+
+    con.commit()
+    con.close()
 
 
 # ============================================================
 # CHUẨN HÓA SỐ
 # ============================================================
 
-def norm(x):
+def normalize_number(number):
 
     try:
 
-        return f"{int(x):02d}"
+        return f"{int(number):02d}"
 
     except:
 
@@ -158,59 +209,376 @@ def norm(x):
 
 
 # ============================================================
-# LẤY LÔ TRONG NGÀY
+# TẢI TRANG XSMB
 # ============================================================
 
-def get_numbers(row):
+def download_page():
 
-    text = str(row["numbers"])
-
-    text = (
-        text
-        .replace(",", " ")
-        .replace(";", " ")
+    response = requests.get(
+        SOURCE_URL,
+        headers=HEADERS,
+        timeout=30
     )
 
-    result = []
+    response.raise_for_status()
 
-    for x in text.split():
-
-        n = norm(x)
-
-        if n is not None:
-
-            result.append(n)
-
-    return result
+    return response.text
 
 
 # ============================================================
-# TẠO MATRIX 60 NGÀY
+# PARSE DỮ LIỆU
+#
+# Nguồn có cấu trúc:
+#
+# ĐB
+# G1
+# G2
+# ...
+# G7
+#
+# Ta lấy toàn bộ các giải.
+# Sau đó lấy 2 số cuối của từng giải.
 # ============================================================
 
-def create_matrix(df):
+def parse_xsmb_page(html):
 
-    numbers = [
-        f"{i:02d}"
-        for i in range(100)
+    soup = BeautifulSoup(
+        html,
+        "html.parser"
+    )
+
+    text = soup.get_text(
+        "\n",
+        strip=True
+    )
+
+    lines = [
+        x.strip()
+        for x in text.splitlines()
+        if x.strip()
     ]
 
-    matrix = {
-        n: []
-        for n in numbers
+    results = []
+
+    current_date = None
+    current_numbers = []
+    db_number = None
+
+    month_map = {
+        "01": 1,
+        "02": 2,
+        "03": 3,
+        "04": 4,
+        "05": 5,
+        "06": 6,
+        "07": 7,
+        "08": 8,
+        "09": 9,
+        "10": 10,
+        "11": 11,
+        "12": 12
     }
 
-    for _, row in df.iterrows():
+    # --------------------------------------------------------
+    # Nhận dạng ngày
+    #
+    # Ví dụ:
+    # XSMB Thứ 2, 24/08/2026
+    # --------------------------------------------------------
 
-        day_numbers = set(
-            get_numbers(row)
+    date_pattern = re.compile(
+        r"(\d{2})/(\d{2})/(\d{4})"
+    )
+
+    # --------------------------------------------------------
+    # Nhận dạng giải
+    # --------------------------------------------------------
+
+    prize_pattern = re.compile(
+        r"^(ĐB|G1|G2|G3|G4|G5|G6|G7)$"
+    )
+
+    number_pattern = re.compile(
+        r"^\d{2,5}$"
+    )
+
+    for line in lines:
+
+        # ----------------------------------------------------
+        # NGÀY
+        # ----------------------------------------------------
+
+        match = date_pattern.search(line)
+
+        if match:
+
+            # Nếu đang có dữ liệu ngày trước
+            if current_date and current_numbers:
+
+                results.append({
+
+                    "date":
+                        current_date,
+
+                    "db":
+                        db_number,
+
+                    "numbers":
+                        current_numbers
+                })
+
+            day, month, year = match.groups()
+
+            current_date = (
+                f"{year}-{month}-{day}"
+            )
+
+            current_numbers = []
+
+            db_number = None
+
+            continue
+
+        # ----------------------------------------------------
+        # Bỏ các dòng không phải kết quả
+        # ----------------------------------------------------
+
+        if line in [
+            "Đầu",
+            "Lô tô",
+            "Đuôi"
+        ]:
+
+            continue
+
+        if line.startswith("XSMB"):
+
+            continue
+
+        if line.startswith("Sổ kết quả"):
+
+            continue
+
+        # ----------------------------------------------------
+        # Tách số
+        # ----------------------------------------------------
+
+        found = re.findall(
+            r"\b\d{2,5}\b",
+            line
         )
 
-        for n in numbers:
+        if not found:
+
+            continue
+
+        # ----------------------------------------------------
+        # Không lấy dòng đầu-lô tô
+        #
+        # Các dòng đó chứa 0 | 03; 04...
+        # nên chỉ xử lý khi đang ở vùng giải.
+        # ----------------------------------------------------
+
+        if current_date:
+
+            for n in found:
+
+                if len(n) in (2, 3, 4, 5):
+
+                    # Nếu là số giải
+                    # lưu toàn bộ
+
+                    current_numbers.append(
+                        n
+                    )
+
+            # Đặc biệt:
+            # dòng ĐB thường xuất hiện đầu tiên
+            if (
+                db_number is None
+                and len(found) >= 1
+                and len(found[0]) == 5
+            ):
+
+                db_number = found[0]
+
+    # --------------------------------------------------------
+    # Lưu ngày cuối
+    # --------------------------------------------------------
+
+    if current_date and current_numbers:
+
+        results.append({
+
+            "date":
+                current_date,
+
+            "db":
+                db_number,
+
+            "numbers":
+                current_numbers
+        })
+
+    # --------------------------------------------------------
+    # Chuẩn hóa
+    #
+    # Quan trọng:
+    # mỗi giải có thể có nhiều số.
+    #
+    # Lấy 2 số cuối của toàn bộ giải.
+    # --------------------------------------------------------
+
+    clean = []
+
+    for item in results:
+
+        loto = []
+
+        for n in item["numbers"]:
+
+            if len(n) >= 2:
+
+                loto.append(
+                    n[-2:]
+                )
+
+        # loại các ngày có quá ít dữ liệu
+        if len(loto) >= 20:
+
+            clean.append({
+
+                "date":
+                    item["date"],
+
+                "db":
+                    item["db"],
+
+                "loto":
+                    loto
+            })
+
+    return clean
+
+
+# ============================================================
+# LƯU KẾT QUẢ
+# ============================================================
+
+def save_results(results):
+
+    con = get_db()
+
+    cur = con.cursor()
+
+    for item in results:
+
+        unique_loto = list(
+            dict.fromkeys(
+                item["loto"]
+            )
+        )
+
+        cur.execute("""
+            INSERT OR REPLACE INTO results
+            (
+                date,
+                db,
+                all_numbers,
+                imported_at
+            )
+            VALUES (?, ?, ?, ?)
+        """, (
+
+            item["date"],
+
+            item["db"],
+
+            ",".join(
+                unique_loto
+            ),
+
+            datetime.now().isoformat()
+        ))
+
+    con.commit()
+    con.close()
+
+
+# ============================================================
+# LẤY DATAFRAME LOGIC
+# ============================================================
+
+def load_history():
+
+    con = get_db()
+
+    cur = con.cursor()
+
+    cur.execute("""
+        SELECT
+            date,
+            db,
+            all_numbers
+        FROM results
+        ORDER BY date ASC
+    """)
+
+    rows = cur.fetchall()
+
+    con.close()
+
+    history = []
+
+    for row in rows:
+
+        date = row[0]
+
+        db_number = row[1]
+
+        numbers = [
+            x
+            for x in row[2].split(",")
+            if x
+        ]
+
+        history.append({
+
+            "date": date,
+
+            "db": db_number,
+
+            "loto": numbers
+        })
+
+    return history
+
+
+# ============================================================
+# TẠO MATRIX 100 SỐ
+# ============================================================
+
+def create_matrix(history):
+
+    matrix = {
+
+        f"{i:02d}": []
+
+        for i in range(100)
+    }
+
+    for day in history:
+
+        numbers = set(
+            day["loto"]
+        )
+
+        for n in matrix:
 
             matrix[n].append(
+
                 1
-                if n in day_numbers
+                if n in numbers
                 else 0
             )
 
@@ -218,55 +586,19 @@ def create_matrix(df):
 
 
 # ============================================================
-# TỶ LỆ XUẤT HIỆN
+# TẦN SUẤT
 # ============================================================
 
-def freq(values):
+def frequency(values):
 
     if not values:
 
-        return 0
+        return 0.0
 
-    return sum(values) / len(values)
-
-
-# ============================================================
-# LÔ RƠI
-#
-# Nếu số xuất hiện ngày D
-# kiểm tra D+1/D+2/D+3
-# ============================================================
-
-def fall_rate(values):
-
-    if len(values) < 5:
-
-        return 0
-
-    appearance = 0
-    fall = 0
-
-    for i in range(
-        len(values) - 3
-    ):
-
-        if values[i] == 1:
-
-            appearance += 1
-
-            if (
-                values[i + 1] == 1
-                or values[i + 2] == 1
-                or values[i + 3] == 1
-            ):
-
-                fall += 1
-
-    if appearance == 0:
-
-        return 0
-
-    return fall / appearance
+    return (
+        sum(values) /
+        len(values)
+    )
 
 
 # ============================================================
@@ -277,9 +609,9 @@ def missing_days(values):
 
     count = 0
 
-    for x in reversed(values):
+    for value in reversed(values):
 
-        if x == 0:
+        if value == 0:
 
             count += 1
 
@@ -291,32 +623,76 @@ def missing_days(values):
 
 
 # ============================================================
-# ĐIỂM TỪNG LÔ
+# LÔ RƠI
+#
+# Xuất hiện ngày D
+# rồi xuất hiện lại D+1/D+2/D+3
 # ============================================================
 
-def calculate_scores(df):
+def fall_rate(values):
+
+    if len(values) < 5:
+
+        return 0.0
+
+    appearances = 0
+    falls = 0
+
+    for i in range(
+        len(values) - 3
+    ):
+
+        if values[i] == 1:
+
+            appearances += 1
+
+            if (
+                values[i + 1] == 1
+                or values[i + 2] == 1
+                or values[i + 3] == 1
+            ):
+
+                falls += 1
+
+    if appearances == 0:
+
+        return 0.0
+
+    return (
+        falls /
+        appearances
+    )
+
+
+# ============================================================
+# TÍNH SCORE
+# ============================================================
+
+def calculate_scores(history):
+
+    history = history[-LOOKBACK:]
 
     matrix = create_matrix(
-        df.tail(LOOKBACK)
+        history
     )
 
     scores = {}
 
     for number, values in matrix.items():
 
-        f60 = freq(
+        f60 = frequency(
             values[-60:]
         )
 
-        f30 = freq(
+        f30 = frequency(
             values[-30:]
         )
 
-        f14 = freq(
+        f14 = frequency(
             values[-14:]
         )
 
-        f7 = freq(
+        f7 = frequency(
             values[-7:]
         )
 
@@ -328,11 +704,9 @@ def calculate_scores(df):
             values[-30:]
         )
 
-        gan = missing_days(values)
-
-        # ----------------------------------------------------
-        # NORMALIZE GAN
-        # ----------------------------------------------------
+        gan = missing_days(
+            values
+        )
 
         gan_score = min(
             gan / 15,
@@ -340,7 +714,7 @@ def calculate_scores(df):
         )
 
         # ----------------------------------------------------
-        # SCORE
+        # TRỌNG SỐ
         # ----------------------------------------------------
 
         score = (
@@ -364,16 +738,15 @@ def calculate_scores(df):
 
             "score": score,
 
-            "freq60": f60,
-            "freq30": f30,
-            "freq14": f14,
-            "freq7": f7,
+            "f60": f60,
+            "f30": f30,
+            "f14": f14,
+            "f7": f7,
 
             "fall60": fall60,
             "fall30": fall30,
 
             "gan": gan
-
         }
 
     return scores
@@ -383,101 +756,113 @@ def calculate_scores(df):
 # ĐIỂM ĐẦU ĐỀ
 # ============================================================
 
-def head_scores(df):
+def calculate_head_scores(history):
+
+    history = history[-LOOKBACK:]
 
     result = {}
 
-    df60 = df.tail(60)
-    df30 = df.tail(30)
-    df7 = df.tail(7)
+    windows = {
+
+        60: 0.45,
+        30: 0.35,
+        7: 0.20
+    }
 
     for head in range(10):
 
-        def calc(data):
+        total_score = 0
 
-            count = 0
+        for window, weight in windows.items():
 
-            for _, row in data.iterrows():
+            data = history[-window:]
 
-                nums = get_numbers(row)
+            if not data:
+
+                continue
+
+            hit_days = 0
+
+            for day in data:
 
                 if any(
                     int(n[0]) == head
-                    for n in nums
+                    for n in day["loto"]
                 ):
 
-                    count += 1
+                    hit_days += 1
 
-            return (
-                count / len(data)
-                if len(data)
-                else 0
+            rate = (
+                hit_days /
+                len(data)
             )
 
-        f60 = calc(df60)
-        f30 = calc(df30)
-        f7 = calc(df7)
+            total_score += (
+                rate * weight
+            )
 
-        result[head] = (
-
-            0.45 * f60 +
-            0.35 * f30 +
-            0.20 * f7
-        )
+        result[head] = total_score
 
     return result
 
 
 # ============================================================
-# CÙNG XUẤT HIỆN
+# ĐỒNG XUẤT HIỆN
 # ============================================================
 
 def pair_frequency(
     a,
     b,
-    df
+    history
 ):
+
+    data = history[-LOOKBACK:]
+
+    if not data:
+
+        return 0.0
 
     count = 0
 
-    days = df.tail(
-        LOOKBACK
-    )
-
-    for _, row in days.iterrows():
+    for day in data:
 
         nums = set(
-            get_numbers(row)
+            day["loto"]
         )
 
-        if a in nums and b in nums:
+        if (
+            a in nums
+            and
+            b in nums
+        ):
 
             count += 1
 
-    if len(days) == 0:
-
-        return 0
-
-    return count / len(days)
+    return (
+        count /
+        len(data)
+    )
 
 
 # ============================================================
-# XIÊN 2
+# CHỌN XIÊN 2
 # ============================================================
 
-def calculate_xien(
+def select_xien(
     scores,
-    df
+    history
 ):
 
     ranking = sorted(
+
         scores.keys(),
+
         key=lambda x:
             scores[x]["score"],
+
         reverse=True
     )
 
-    # Top 20
     candidates = ranking[:20]
 
     best_pair = None
@@ -498,49 +883,53 @@ def calculate_xien(
         pair = pair_frequency(
             a,
             b,
-            df
+            history
         )
 
-        total = (
+        score = (
 
             0.75 * individual +
+
             0.25 * pair
         )
 
-        if total > best_score:
+        if score > best_score:
 
-            best_score = total
-            best_pair = (a, b)
+            best_score = score
+
+            best_pair = (
+                a,
+                b
+            )
 
     return best_pair
 
 
 # ============================================================
-# CHỌN 3 LÔ
+# CHỌN 3 LÔ RƠI
 # ============================================================
 
 def select_loto(scores):
 
     ranking = sorted(
+
         scores.keys(),
+
         key=lambda x:
             scores[x]["score"],
+
         reverse=True
     )
 
-    candidates = []
+    candidates = [
 
-    for n in ranking:
+        n
 
-        data = scores[n]
+        for n in ranking
 
-        # ưu tiên lô có dấu hiệu rơi
+        if scores[n]["fall60"] >= 0.10
+    ]
 
-        if data["fall60"] >= 0.10:
-
-            candidates.append(n)
-
-    # fallback
     if len(candidates) < 3:
 
         candidates = ranking
@@ -552,23 +941,23 @@ def select_loto(scores):
 # DỰ BÁO
 # ============================================================
 
-def predict(df):
+def make_prediction(history):
 
     scores = calculate_scores(
-        df
+        history
     )
 
     loto = select_loto(
         scores
     )
 
-    xien = calculate_xien(
+    xien = select_xien(
         scores,
-        df
+        history
     )
 
-    heads = head_scores(
-        df
+    heads = calculate_head_scores(
+        history
     )
 
     dau = max(
@@ -585,17 +974,138 @@ def predict(df):
         "dau": dau,
 
         "scores": scores
-
     }
 
 
 # ============================================================
-# KIỂM TRA ĐÃ KHÓA CHƯA
+# BACKTEST
+#
+# Không sử dụng dữ liệu tương lai.
+#
+# Tại mỗi ngày T:
+# chỉ dùng dữ liệu trước T
+# để dự báo T.
 # ============================================================
 
-def get_locked(target_date):
+def backtest(history):
 
-    con = db()
+    if len(history) < 65:
+
+        return {
+
+            "loto_rate": 0,
+            "xien_rate": 0,
+            "dau_rate": 0
+        }
+
+    loto_hits = 0
+    xien_hits = 0
+    dau_hits = 0
+
+    total = 0
+
+    start = max(
+        60,
+        len(history) - 60
+    )
+
+    for i in range(
+        start,
+        len(history)
+    ):
+
+        train = history[:i]
+
+        actual = set(
+            history[i]["loto"]
+        )
+
+        prediction = make_prediction(
+            train
+        )
+
+        loto = prediction["loto"]
+
+        xien = prediction["xien"]
+
+        dau = prediction["dau"]
+
+        # ----------------------------------------------------
+        # 3 LÔ:
+        # ít nhất 1 trong 3 số xuất hiện
+        # ----------------------------------------------------
+
+        if any(
+            n in actual
+            for n in loto
+        ):
+
+            loto_hits += 1
+
+        # ----------------------------------------------------
+        # XIÊN:
+        # cả 2 số phải xuất hiện
+        # ----------------------------------------------------
+
+        if (
+            xien[0] in actual
+            and
+            xien[1] in actual
+        ):
+
+            xien_hits += 1
+
+        # ----------------------------------------------------
+        # ĐẦU ĐỀ:
+        #
+        # Ở đây xét đầu của GIẢI ĐẶC BIỆT
+        # ----------------------------------------------------
+
+        db = history[i]["db"]
+
+        if db:
+
+            db_head = int(
+                db[-2]
+            )
+
+            if db_head == dau:
+
+                dau_hits += 1
+
+        total += 1
+
+    if total == 0:
+
+        return {
+
+            "loto_rate": 0,
+            "xien_rate": 0,
+            "dau_rate": 0
+        }
+
+    return {
+
+        "loto_rate":
+            loto_hits / total,
+
+        "xien_rate":
+            xien_hits / total,
+
+        "dau_rate":
+            dau_hits / total
+    }
+
+
+# ============================================================
+# LẤY TÍN HIỆU ĐÃ KHÓA
+# ============================================================
+
+def get_locked_signal(
+    target_date
+):
+
+    con = get_db()
 
     cur = con.cursor()
 
@@ -606,10 +1116,15 @@ def get_locked(target_date):
             loto3,
             xien1,
             xien2,
-            dau_de
-        FROM locked_signal
+            dau,
+            backtest_loto_rate,
+            backtest_xien_rate,
+            backtest_dau_rate
+        FROM signals
         WHERE target_date = ?
-    """, (target_date,))
+    """, (
+        target_date,
+    ))
 
     row = cur.fetchone()
 
@@ -632,8 +1147,20 @@ def get_locked(target_date):
             row[4]
         ],
 
-        "dau": row[5]
+        "dau":
+            row[5],
 
+        "backtest": {
+
+            "loto":
+                row[6],
+
+            "xien":
+                row[7],
+
+            "dau":
+                row[8]
+        }
     }
 
 
@@ -643,24 +1170,19 @@ def get_locked(target_date):
 
 def lock_signal(
     target_date,
-    prediction
+    prediction,
+    backtest_result
 ):
 
-    existing = get_locked(
+    existing = get_locked_signal(
         target_date
     )
 
     # --------------------------------------------------------
-    # QUAN TRỌNG:
-    # Nếu đã có tín hiệu -> KHÔNG tính lại.
+    # ĐÃ CÓ -> KHÔNG BAO GIỜ TÍNH LẠI
     # --------------------------------------------------------
 
     if existing:
-
-        logging.info(
-            f"Tín hiệu {target_date} "
-            f"đã khóa."
-        )
 
         return existing
 
@@ -670,12 +1192,13 @@ def lock_signal(
 
     dau = prediction["dau"]
 
-    con = db()
+    con = get_db()
 
     cur = con.cursor()
 
     cur.execute("""
-        INSERT INTO locked_signal (
+        INSERT INTO signals
+        (
             target_date,
 
             loto1,
@@ -685,11 +1208,16 @@ def lock_signal(
             xien1,
             xien2,
 
-            dau_de,
+            dau,
 
-            created_at
+            created_at,
+
+            backtest_loto_rate,
+            backtest_xien_rate,
+            backtest_dau_rate
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
 
         target_date,
@@ -703,26 +1231,43 @@ def lock_signal(
 
         str(dau),
 
-        datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        datetime.now().isoformat(),
+
+        backtest_result[
+            "loto_rate"
+        ],
+
+        backtest_result[
+            "xien_rate"
+        ],
+
+        backtest_result[
+            "dau_rate"
+        ]
     ))
 
     con.commit()
+
     con.close()
 
-    logging.info(
-        f"Đã khóa tín hiệu {target_date}"
-    )
+    return {
 
-    return prediction
+        "loto": loto,
+
+        "xien": xien,
+
+        "dau": dau,
+
+        "backtest":
+            backtest_result
+    }
 
 
 # ============================================================
 # GỬI TÍN HIỆU
 # ============================================================
 
-def send_signal(
+def send_prediction(
     signal,
     target_date
 ):
@@ -733,12 +1278,15 @@ def send_signal(
 
     dau = signal["dau"]
 
+    bt = signal["backtest"]
+
     message = f"""
 <b>🔮 TÍN HIỆU XSMB D+1</b>
 
-📅 Ngày: <b>{target_date}</b>
+📅 Ngày dự báo:
+<b>{target_date}</b>
 
-━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
 <b>🔥 3 LÔ RƠI</b>
 
@@ -746,195 +1294,468 @@ def send_signal(
 2️⃣ <b>{loto[1]}</b>
 3️⃣ <b>{loto[2]}</b>
 
-━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
 <b>🎯 XIÊN 2</b>
 
 <b>{xien[0]} - {xien[1]}</b>
 
-━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
 <b>🎲 ĐẦU ĐỀ</b>
 
 <b>Đầu {dau}</b>
 
-━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
+
+📊 <b>BACKTEST 60 NGÀY</b>
+
+Lô:
+<b>{bt['loto'] * 100:.1f}%</b>
+
+Xiên:
+<b>{bt['xien'] * 100:.1f}%</b>
+
+Đề:
+<b>{bt['dau'] * 100:.1f}%</b>
+
+━━━━━━━━━━━━━━━━
 
 🔒 <b>TÍN HIỆU ĐÃ KHÓA</b>
 
-📊 Dữ liệu:
-60 ngày + thống kê lô rơi
+⏱ Gửi lại mỗi 5 phút.
+Không thay đổi số.
 
-⏱ Bot cập nhật:
-5 phút/lần
-
-⚠️ Tín hiệu xác suất tham khảo.
+⚠️ Tín hiệu thống kê tham khảo,
+không đảm bảo kết quả.
 """
 
-    telegram(message)
+    send_telegram(
+        message
+    )
 
 
 # ============================================================
-# 19:00
-#
-# CHỈ TÍNH 1 LẦN
+# TỰ LẤY KẾT QUẢ
+# ============================================================
+
+def update_results():
+
+    logging.info(
+        "Đang lấy dữ liệu XSMB..."
+    )
+
+    html = download_page()
+
+    results = parse_xsmb_page(
+        html
+    )
+
+    if not results:
+
+        logging.error(
+            "Không đọc được dữ liệu."
+        )
+
+        return []
+
+    save_results(
+        results
+    )
+
+    logging.info(
+        "Đã cập nhật %d ngày.",
+        len(results)
+    )
+
+    return results
+
+
+# ============================================================
+# NGÀY MỚI NHẤT
+# ============================================================
+
+def get_latest_result():
+
+    history = load_history()
+
+    if not history:
+
+        return None
+
+    return history[-1]
+
+
+# ============================================================
+# GỬI KẾT QUẢ 18:35
+# ============================================================
+
+def job_1835():
+
+    logging.info(
+        "========== 18:35 =========="
+    )
+
+    try:
+
+        update_results()
+
+        result = get_latest_result()
+
+        if not result:
+
+            logging.error(
+                "Không có kết quả."
+            )
+
+            return
+
+        date = datetime.strptime(
+            result["date"],
+            "%Y-%m-%d"
+        ).strftime(
+            "%d/%m/%Y"
+        )
+
+        numbers = result["loto"]
+
+        db_number = (
+            result["db"]
+            or "N/A"
+        )
+
+        message = f"""
+<b>📢 KẾT QUẢ XSMB</b>
+
+📅 <b>{date}</b>
+
+🏆 ĐB:
+<b>{db_number}</b>
+
+🔢 Lô tô:
+{", ".join(numbers)}
+
+━━━━━━━━━━━━━━━━
+
+🤖 Đã cập nhật dữ liệu 60 ngày.
+19:00 bot sẽ tính tín hiệu D+1.
+"""
+
+        send_telegram(
+            message
+        )
+
+        # ----------------------------------------------------
+        # CHẤM TÍN HIỆU HÔM TRƯỚC
+        # ----------------------------------------------------
+
+        evaluate_previous_signal(
+            result
+        )
+
+    except Exception as e:
+
+        logging.exception(
+            "Lỗi 18:35: %s",
+            e
+        )
+
+
+# ============================================================
+# CHẤM TÍN HIỆU NGÀY TRƯỚC
+# ============================================================
+
+def evaluate_previous_signal(
+    result
+):
+
+    target_date = result["date"]
+
+    signal = get_locked_signal(
+        target_date
+    )
+
+    if not signal:
+
+        return
+
+    actual = set(
+        result["loto"]
+    )
+
+    loto_hit = any(
+        n in actual
+        for n in signal["loto"]
+    )
+
+    xien_hit = (
+        signal["xien"][0] in actual
+        and
+        signal["xien"][1] in actual
+    )
+
+    db = result["db"]
+
+    dau_hit = False
+
+    if db:
+
+        actual_dau = db[-2]
+
+        dau_hit = (
+            str(signal["dau"])
+            == actual_dau
+        )
+
+    message = f"""
+<b>📊 ĐÁNH GIÁ TÍN HIỆU</b>
+
+📅 Ngày:
+<b>{target_date}</b>
+
+🔥 3 lô:
+{"✅ CÓ" if loto_hit else "❌ KHÔNG"}
+
+🎯 Xiên 2:
+{"✅ CÓ" if xien_hit else "❌ KHÔNG"}
+
+🎲 Đầu đề:
+{"✅ CÓ" if dau_hit else "❌ KHÔNG"}
+"""
+
+    send_telegram(
+        message
+    )
+
+
+# ============================================================
+# 19:00 - TÍNH DỰ BÁO
 # ============================================================
 
 def job_1900():
 
     logging.info(
-        "19:00 - Tạo tín hiệu D+1"
+        "========== 19:00 =========="
     )
 
-    df = load_data()
+    try:
 
-    if len(df) < LOOKBACK:
+        # ----------------------------------------------------
+        # Cập nhật lần cuối trước khi tính
+        # ----------------------------------------------------
 
-        telegram(
-            "⚠️ Chưa đủ 60 ngày "
-            "dữ liệu để dự báo."
+        update_results()
+
+        history = load_history()
+
+        if len(history) < LOOKBACK:
+
+            send_telegram(
+                f"""
+⚠️ <b>CHƯA ĐỦ DỮ LIỆU</b>
+
+Hiện có:
+<b>{len(history)}</b> ngày
+
+Cần:
+<b>{LOOKBACK}</b> ngày
+"""
+            )
+
+            return
+
+        latest = history[-1]
+
+        latest_date = datetime.strptime(
+            latest["date"],
+            "%Y-%m-%d"
         )
 
-        return
-
-    last_date = df.iloc[-1]["date"]
-
-    target_date = (
-        last_date +
-        timedelta(days=1)
-    ).strftime("%Y-%m-%d")
-
-    # --------------------------------------------------------
-    # KIỂM TRA DATABASE
-    # --------------------------------------------------------
-
-    existing = get_locked(
-        target_date
-    )
-
-    if existing:
-
-        logging.info(
-            "Đã có tín hiệu. "
-            "Không tính lại."
+        target_date = (
+            latest_date +
+            timedelta(days=1)
+        ).strftime(
+            "%Y-%m-%d"
         )
 
-        send_signal(
-            existing,
+        # ----------------------------------------------------
+        # KIỂM TRA ĐÃ KHÓA CHƯA
+        # ----------------------------------------------------
+
+        existing = get_locked_signal(
             target_date
         )
 
-        return
+        if existing:
 
-    # --------------------------------------------------------
-    # TÍNH DỰ BÁO
-    # --------------------------------------------------------
+            logging.info(
+                "Dự báo đã tồn tại: %s",
+                target_date
+            )
 
-    prediction = predict(
-        df
-    )
+            send_prediction(
+                existing,
+                target_date
+            )
 
-    # --------------------------------------------------------
-    # KHÓA
-    # --------------------------------------------------------
+            return
 
-    signal = lock_signal(
-        target_date,
-        prediction
-    )
+        # ----------------------------------------------------
+        # CHỈ DÙNG 60 NGÀY
+        # ----------------------------------------------------
 
-    # --------------------------------------------------------
-    # GỬI
-    # --------------------------------------------------------
+        train = history[-LOOKBACK:]
 
-    send_signal(
-        signal,
-        target_date
-    )
+        # ----------------------------------------------------
+        # BACKTEST
+        # ----------------------------------------------------
+
+        logging.info(
+            "Đang chạy backtest..."
+        )
+
+        bt = backtest(
+            history
+        )
+
+        # ----------------------------------------------------
+        # DỰ BÁO
+        # ----------------------------------------------------
+
+        logging.info(
+            "Đang tính D+1..."
+        )
+
+        prediction = make_prediction(
+            train
+        )
+
+        # ----------------------------------------------------
+        # KHÓA
+        # ----------------------------------------------------
+
+        signal = lock_signal(
+            target_date,
+
+            prediction,
+
+            bt
+        )
+
+        # ----------------------------------------------------
+        # GỬI
+        # ----------------------------------------------------
+
+        send_prediction(
+            signal,
+            target_date
+        )
+
+        logging.info(
+            "ĐÃ KHÓA DỰ BÁO %s",
+            target_date
+        )
+
+    except Exception as e:
+
+        logging.exception(
+            "Lỗi 19:00: %s",
+            e
+        )
 
 
 # ============================================================
-# CỨ 5 PHÚT GỬI LẠI
+# GỬI LẠI MỖI 5 PHÚT
 # ============================================================
 
 def job_every_5_minutes():
 
-    df = load_data()
+    try:
 
-    if len(df) == 0:
+        now = datetime.now()
 
-        return
+        # ----------------------------------------------------
+        # Chỉ gửi trong khoảng:
+        #
+        # 19:00 -> 18:30 hôm sau
+        #
+        # Không gửi trước khi có tín hiệu.
+        # ----------------------------------------------------
 
-    last_date = df.iloc[-1]["date"]
+        if now.hour == 18 and now.minute >= 35:
 
-    target_date = (
-        last_date +
-        timedelta(days=1)
-    ).strftime("%Y-%m-%d")
+            return
 
-    signal = get_locked(
-        target_date
-    )
+        history = load_history()
 
-    # --------------------------------------------------------
-    # CHƯA CÓ -> KHÔNG TỰ TÍNH
-    #
-    # Chỉ 19:00 mới được phép tạo tín hiệu.
-    # --------------------------------------------------------
+        if not history:
 
-    if not signal:
+            return
 
-        logging.info(
-            "Chưa có tín hiệu khóa."
+        latest = history[-1]
+
+        latest_date = datetime.strptime(
+            latest["date"],
+            "%Y-%m-%d"
         )
 
-        return
+        target_date = (
+            latest_date +
+            timedelta(days=1)
+        ).strftime(
+            "%Y-%m-%d"
+        )
 
-    logging.info(
-        f"Gửi lại tín hiệu {target_date}"
-    )
+        signal = get_locked_signal(
+            target_date
+        )
 
-    send_signal(
-        signal,
-        target_date
-    )
+        if not signal:
+
+            return
+
+        logging.info(
+            "Gửi tín hiệu khóa %s",
+            target_date
+        )
+
+        send_prediction(
+            signal,
+            target_date
+        )
+
+    except Exception as e:
+
+        logging.exception(
+            "Lỗi gửi 5 phút: %s",
+            e
+        )
 
 
 # ============================================================
-# 18:35
-# GỬI KẾT QUẢ NGÀY HÔM ĐÓ
+# KIỂM TRA TELEGRAM
 # ============================================================
 
-def job_1835():
+def test_telegram():
 
-    df = load_data()
+    message = """
+<b>🤖 XSMB BOT ONLINE</b>
 
-    if len(df) == 0:
+Telegram kết nối thành công.
 
-        return
+⏰ 18:35:
+Lấy kết quả XSMB
 
-    row = df.iloc[-1]
+⏰ 19:00:
+Tính D+1
 
-    date = row["date"].strftime(
-        "%d/%m/%Y"
-    )
-
-    numbers = get_numbers(row)
-
-    message = f"""
-<b>📢 KẾT QUẢ XSMB</b>
-
-📅 <b>{date}</b>
-
-🔢 Lô:
-{", ".join(numbers)}
-
-━━━━━━━━━━━━━━
-
-🤖 Dữ liệu đã được cập nhật.
+⏱ Mỗi 5 phút:
+Gửi lại tín hiệu đã khóa.
 """
 
-    telegram(message)
+    return send_telegram(
+        message
+    )
 
 
 # ============================================================
@@ -943,56 +1764,92 @@ def job_1835():
 
 def main():
 
-    init_db()
+    init_database()
+
+    # --------------------------------------------------------
+    # LẤY DỮ LIỆU NGAY KHI KHỞI ĐỘNG
+    # --------------------------------------------------------
+
+    try:
+
+        update_results()
+
+    except Exception as e:
+
+        logging.error(
+            "Không cập nhật được dữ liệu: %s",
+            e
+        )
+
+    # --------------------------------------------------------
+    # TEST TELEGRAM
+    # --------------------------------------------------------
+
+    test_telegram()
+
+    # --------------------------------------------------------
+    # SCHEDULER
+    # --------------------------------------------------------
 
     scheduler = BlockingScheduler(
         timezone=TIMEZONE
     )
 
-    # --------------------------------------------------------
     # 18:35
-    # --------------------------------------------------------
-
     scheduler.add_job(
+
         job_1835,
+
         "cron",
+
         hour=18,
+
         minute=35,
-        id="result_1835",
+
+        id="get_result",
+
         replace_existing=True
     )
 
-    # --------------------------------------------------------
     # 19:00
-    # --------------------------------------------------------
-
     scheduler.add_job(
+
         job_1900,
+
         "cron",
+
         hour=19,
+
         minute=0,
-        id="prediction_1900",
+
+        id="create_prediction",
+
         replace_existing=True
     )
 
     # --------------------------------------------------------
-    # CỨ 5 PHÚT
+    # 5 PHÚT / LẦN
     # --------------------------------------------------------
 
     scheduler.add_job(
+
         job_every_5_minutes,
+
         "cron",
+
         minute="*/5",
-        id="signal_5_minutes",
+
+        id="send_signal",
+
         replace_existing=True
     )
 
     logging.info(
-        "================================="
+        "===================================="
     )
 
     logging.info(
-        "XSMB BOT STARTED"
+        "XSMB TELEGRAM BOT ĐANG CHẠY"
     )
 
     logging.info(
@@ -1000,7 +1857,7 @@ def main():
     )
 
     logging.info(
-        "19:00 -> Khóa tín hiệu D+1"
+        "19:00 -> Tính + khóa D+1"
     )
 
     logging.info(
@@ -1008,14 +1865,14 @@ def main():
     )
 
     logging.info(
-        "================================="
+        "===================================="
     )
 
     scheduler.start()
 
 
 # ============================================================
-# RUN
+# START
 # ============================================================
 
 if __name__ == "__main__":
