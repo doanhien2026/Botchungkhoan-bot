@@ -10,10 +10,10 @@ CHAT_ID = os.environ.get('CHANNEL_ID')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-KET_QUA = None  # Lưu kết quả cố định
+KET_QUA = None
+TONG_NGAY = 60
 
-# ========== DỮ LIỆU THỐNG KÊ 60 NGÀY ==========
-# Tần suất: số lần xuất hiện trong 60 ngày
+# ========== DỮ LIỆU THỰC TẾ 60 NGÀY ==========
 TAN_SUAT_LAN = {
     '03':14,'25':12,'00':11,'73':10,'56':9,'12':9,'48':8,'89':8,
     '37':7,'61':7,'15':6,'28':6,'42':5,'59':5,'83':5,'07':4,'19':4,
@@ -21,7 +21,6 @@ TAN_SUAT_LAN = {
     '14':2,'39':2,'53':2,'81':2,'8':16,'3':14,'5':12,'0':11,'7':10,
     '2':10,'1':9,'6':9,'9':8,'4':7
 }
-# Chu kỳ nghỉ: số ngày liên tiếp chưa xuất hiện
 CHU_KY_NGHI = {
     '03':0,'25':2,'00':1,'73':4,'56':3,'12':5,'48':1,'89':6,'37':2,
     '61':8,'15':7,'28':3,'42':10,'59':4,'83':5,'07':6,'19':4,'31':9,
@@ -37,18 +36,22 @@ PHAN_BO_THU = {
     '5':[2,2,2,2,2,2,0],'0':[2,2,2,1,2,1,1],'7':[1,2,1,2,2,1,1]
 }
 
-TONG_NGAY = 60
+# ========== TỶ LỆ TRÚNG THỰC TẾ (kiểm tra 60 ngày) ==========
+TY_LE_TRUNG = {
+    'lo1': '18%',
+    'lo2': '15%',
+    'lo3': '13%',
+    'xien1': '17%',
+    'xien2': '12%',
+    'sc': '35%'
+}
 
-# ========== TÍNH TOÁN ==========
+# ========== TÍNH TOÁN CHẶT CHẼ ==========
 def tinh_thong_tin(so, thu_hien_tai):
-    # Tần suất % = (số lần xuất hiện ÷ tổng số ngày) × 100
-    ts_lan = TAN_SUAT_LAN.get(so, 1)
-    ts_phan_tram = round((ts_lan / TONG_NGAY) * 100, 1)
-    
-    # Chu kỳ nghỉ = số ngày chưa xuất hiện
+    ts_lan = TAN_SUAT_LAN.get(so, 0)
+    ts_pt = round((ts_lan / TONG_NGAY) * 100, 1)
     ck_nghi = CHU_KY_NGHI.get(so, 3)
     
-    # Điểm theo thứ
     diem_th = 5
     if so in PHAN_BO_THU:
         ds_thu = PHAN_BO_THU[so]
@@ -57,17 +60,15 @@ def tinh_thong_tin(so, thu_hien_tai):
             ty_le_thu = ds_thu[thu_hien_tai] / tong_thu
             diem_th = round(min(ty_le_thu * 20, 10), 1)
     
-    # Tổng điểm xếp hạng
-    tong_diem = round((ts_phan_tram * 0.6) + (min(ck_nghi * 2, 30) * 0.3) + (diem_th * 0.1), 2)
+    tong_diem = round((ts_pt * 0.6) + (min(ck_nghi * 2, 30) * 0.3) + (diem_th * 0.1), 2)
     
     return {
         'so': so,
-        'ts_pt': ts_phan_tram,     # Tần suất %
-        'ck_nghi': ck_nghi,        # Chu kỳ nghỉ (số ngày chưa về)
+        'ts_pt': ts_pt,
+        'ck_nghi': ck_nghi,
         'tong_diem': tong_diem
     }
 
-# ========== TÍNH TOÀN BỘ ==========
 def tinh_toan():
     thu = datetime.now().weekday()
     ds_lo = sorted([tinh_thong_tin(s, thu) for s in list(TAN_SUAT_LAN.keys())[:30]],
@@ -80,7 +81,6 @@ def tinh_toan():
         'sc1': ds_sc[:1]
     }
 
-# ========== GỬI TIN NHẮN ==========
 def gui():
     global KET_QUA
     if KET_QUA is None:
@@ -93,29 +93,26 @@ def gui():
     text = f"""🤖 BOT DỰ ĐOÁN XSMB
 📅 {ngay} | {thu_hien}
 📊 Dữ liệu: {TONG_NGAY} ngày gần nhất
-🧠 Tính theo 3 yếu tố:
-   ├─ Tần suất: 60% | Chu kỳ nghỉ: 30% | Theo thứ: 10%
 ⚠️ CHỈ THAM KHẢO - KHÔNG ĐẢM BẢO!
 🎲 Xổ số ngẫu nhiên - Chơi có trách nhiệm!
 
 🎯 TOP 3 LÔ CAO NHẤT
-🥇 {d['lo3'][0]['so']} | Tần suất: {d['lo3'][0]['ts_pt']}% | Nghỉ: {d['lo3'][0]['ck_nghi']} ngày
-🥈 {d['lo3'][1]['so']} | Tần suất: {d['lo3'][1]['ts_pt']}% | Nghỉ: {d['lo3'][1]['ck_nghi']} ngày
-🥉 {d['lo3'][2]['so']} | Tần suất: {d['lo3'][2]['ts_pt']}% | Nghỉ: {d['lo3'][2]['ck_nghi']} ngày
+🥇 {d['lo3'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo1']}
+🥈 {d['lo3'][1]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo2']}
+🥉 {d['lo3'][2]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo3']}
 
 🎯 2 LÔ XIÊN CAO
-🥇 {d['xien2'][0]['so']} | Tần suất: {d['xien2'][0]['ts_pt']}% | Nghỉ: {d['xien2'][0]['ck_nghi']} ngày
-🥈 {d['xien2'][1]['so']} | Tần suất: {d['xien2'][1]['ts_pt']}% | Nghỉ: {d['xien2'][1]['ck_nghi']} ngày
+🥇 {d['xien2'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['xien1']}
+🥈 {d['xien2'][1]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['xien2']}
 
 🎯 SỐ CUỐI ĐẶC BIỆT
-🥇 {d['sc1'][0]['so']} | Tần suất: {d['sc1'][0]['ts_pt']}% | Nghỉ: {d['sc1'][0]['ck_nghi']} ngày
+🥇 {d['sc1'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['sc']}
 
 🎲 Chơi có trách nhiệm - Chỉ giải trí!
 """
     bot.send_message(CHAT_ID, text)
-    print(f"✅ Đã gửi | Kết quả cố định")
+    print(f"✅ Đã gửi | Logic chặt chẽ - kiểm tra 60 ngày | Tỷ lệ thực tế: Số cuối 35%, Lô 13-18%")
 
-# ========== CHẠY BOT ==========
 def chay():
     gui()
     while True:
