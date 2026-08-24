@@ -15,7 +15,7 @@ MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
 
 # ==========================================
-# 🕐 LẤY NGÀY GIỜ VIỆT NAM (UTC+7) — THỜI GIAN THỰC
+# 🕐 LẤY NGÀY GIỜ VIỆT NAM (UTC+7)
 # ==========================================
 def get_vietnam_now():
     utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)
@@ -105,7 +105,7 @@ def is_market_open():
     return False, "🔒 NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA"
 
 # ==========================================
-# 📊 LẤY GIÁ — CẬP NHẬT NGUỒN MỚI
+# 📊 LẤY GIÁ — DÙNG NGUỒN MỚI: STOCKINVEST & CAFEF
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
     now = get_vietnam_now()
@@ -128,9 +128,9 @@ def get_stock_data(symbol, is_market_open_now):
     # 🟢 KHI MỞ CỬA → GỌI API
     data = None
     
-    # NGUỒN 1: VCBS API
+    # NGUỒN 1: StockInvest API — đơn giản & miễn phí
     try:
-        url = f"https://api.vcbs.com.vn/marketdata/quote?symbol={symbol}"
+        url = f"https://api.stockinvest.com.vn/v2/quote?symbol={symbol}"
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
@@ -144,16 +144,16 @@ def get_stock_data(symbol, is_market_open_now):
                         "price": price,
                         "change": change,
                         "change_pct": change_pct,
-                        "source": "🟢 VCBS — GIÁ THỜI GIAN THỰC"
+                        "source": "🟢 StockInvest — GIÁ THỜI GIAN THỰC"
                     }
-                    print(f"   ✅ [VCBS] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+                    print(f"   ✅ [StockInvest] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
     except Exception as e:
-        print(f"   ⚠️ VCBS lỗi: {e}")
+        print(f"   ⚠️ StockInvest lỗi: {e}")
     
     # NGUỒN 2: CafeF API
     if data is None:
         try:
-            url = f"https://api.cafef.vn/finance/quote/symbol/{symbol}"
+            url = f"https://cafef.vn/du-lieu/quote.ashx?symbol={symbol}"
             headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://cafef.vn/"}
             r = requests.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
@@ -173,28 +173,28 @@ def get_stock_data(symbol, is_market_open_now):
         except Exception as e:
             print(f"   ⚠️ CafeF lỗi: {e}")
     
-    # NGUỒN 3: SSI API
+    # NGUỒN 3: Vietstock API
     if data is None:
         try:
-            url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
+            url = f"https://api.vietstock.vn/data/quote?symbol={symbol}"
             headers = {"User-Agent": "Mozilla/5.0"}
             r = requests.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
                 res = r.json()
                 if res.get("symbol") == symbol:
-                    price = float(res.get("lastPrice", 0))
+                    price = float(res.get("price", 0))
                     if price > 0:
                         change = float(res.get("change", 0))
-                        change_pct = float(res.get("changePercent", 0))
+                        change_pct = float(res.get("percentChange", 0))
                         data = {
                             "price": price,
                             "change": change,
                             "change_pct": change_pct,
-                            "source": "🟢 SSI — GIÁ THỜI GIAN THỰC"
+                            "source": "🟢 Vietstock — GIÁ THỜI GIAN THỰC"
                         }
-                        print(f"   ✅ [SSI] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
+                        print(f"   ✅ [Vietstock] {symbol}: {price:,.0f} VNĐ | {change_pct:+.2f}%")
         except Exception as e:
-            print(f"   ⚠️ SSI lỗi: {e}")
+            print(f"   ⚠️ Vietstock lỗi: {e}")
     
     # 💾 LƯU GIÁ MỚI NHẤT
     if data:
@@ -307,7 +307,6 @@ def main():
             interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
             interval_text = "5 phút" if is_open else "1 giờ"
             
-            # Thông báo đổi trạng thái ngày mới
             if weekday != last_weekday:
                 send_telegram_message("""🔔 <b>THÔNG BÁO TRẠNG THÁI</b>
 📅 Ngày: """ + now.strftime('%d/%m/%Y') + """
@@ -322,7 +321,6 @@ def main():
             print(f"Trạng thái: {status_text} | Tần suất: {interval_text}")
             print(f"{'='*60}")
             
-            # Tạo báo cáo
             msg = "<b>📊 BÁO CÁO CỔ PHIẾU</b>\n"
             msg += f"🕐 Thời gian: {now.strftime('%d/%m/%Y %H:%M:%S')} (VN)\n"
             has_data = False
