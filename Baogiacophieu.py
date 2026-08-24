@@ -1,7 +1,7 @@
 import requests
 import time
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # ⚙️ CẤU HÌNH — ĐÃ ĐIỀN SẴN CỦA BẠN
@@ -13,6 +13,14 @@ CHECK_INTERVAL_CLOSED = 3600 # 🔒 Đóng cửa: 1 giờ = 3600 giây
 WATCH_LIST = ["ACV", "FPT", "VCB"]
 MAX_RETRIES = 5
 ERROR_WAIT_TIME = 30
+
+# ==========================================
+# 🕐 LẤY NGÀY GIỜ VIỆT NAM (UTC+7) — THỜI GIAN THỰC
+# ==========================================
+def get_vietnam_now():
+    utc_now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    vietnam_tz = timezone(timedelta(hours=7))
+    return utc_now.astimezone(vietnam_tz)
 
 # ==========================================
 # 💾 LƯU GIÁ CUỐI CÙNG ĐÃ LẤY ĐƯỢC
@@ -49,8 +57,10 @@ def send_telegram_message(text):
 # 🧪 KIỂM TRA KẾT NỐI BAN ĐẦU
 # ==========================================
 def test_bot_connection():
+    now = get_vietnam_now()
     print("=" * 60)
     print("🔍 KIỂM TRA KẾT NỐI BOT TELEGRAM")
+    print(f"🕐 Giờ Việt Nam: {now.strftime('%d/%m/%Y %H:%M:%S')}")
     print("=" * 60)
     try:
         resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=15)
@@ -67,7 +77,7 @@ def test_bot_connection():
     
     return send_telegram_message("""🚀 <b>BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!</b>
 
-📅 Ngày giờ: """ + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + """
+📅 Ngày giờ: """ + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S') + """
 📊 Theo dõi: ACV, FPT, VCB
 
 ⏱️ Mở cửa → Báo cáo mỗi 5 phút (giá thực tế từ API)
@@ -80,7 +90,7 @@ def test_bot_connection():
 # 🕒 KIỂM TRA THỊ TRƯỜNG MỞ/ĐÓNG CỬA
 # ==========================================
 def is_market_open():
-    now = datetime.now()
+    now = get_vietnam_now()
     weekday = now.weekday()
     hour, minute = now.hour, now.minute
     
@@ -98,7 +108,8 @@ def is_market_open():
 # 📊 LẤY GIÁ — CẬP NHẬT NGUỒN MỚI
 # ==========================================
 def get_stock_data(symbol, is_market_open_now):
-    print(f"\n🔄 Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'}")
+    now = get_vietnam_now()
+    print(f"\n🔄 Lấy giá {symbol} | Thị trường: {'🟢 MỞ CỬA' if is_market_open_now else '🔒 ĐÓNG CỬA'} | {now.strftime('%H:%M:%S')}")
     
     # 🔒 KHI ĐÓNG CỬA → DÙNG GIÁ ĐÃ LƯU
     if not is_market_open_now:
@@ -117,7 +128,7 @@ def get_stock_data(symbol, is_market_open_now):
     # 🟢 KHI MỞ CỬA → GỌI API
     data = None
     
-    # NGUỒN 1: VCBS API — đơn giản và ổn định
+    # NGUỒN 1: VCBS API
     try:
         url = f"https://api.vcbs.com.vn/marketdata/quote?symbol={symbol}"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -162,7 +173,7 @@ def get_stock_data(symbol, is_market_open_now):
         except Exception as e:
             print(f"   ⚠️ CafeF lỗi: {e}")
     
-    # NGUỒN 3: SSI API (dự phòng)
+    # NGUỒN 3: SSI API
     if data is None:
         try:
             url = f"https://apipub.ssi.com.vn/md/v1/quote/stock?symbol={symbol}"
@@ -191,7 +202,7 @@ def get_stock_data(symbol, is_market_open_now):
             "price": data["price"],
             "change": data["change"],
             "change_pct": data["change_pct"],
-            "saved_at": datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            "saved_at": get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S')
         }
         print(f"   💾 Đã lưu giá mới cho {symbol}")
         return data
@@ -273,8 +284,10 @@ def calculate_indicators(symbol, price_data):
 # 🚀 CHƯƠNG TRÌNH CHÍNH
 # ==========================================
 def main():
+    now = get_vietnam_now()
     print("=" * 60)
     print("🚀 BOT CỔ PHIẾU — GIÁ THỜI GIAN THỰC")
+    print(f"🕐 Giờ Việt Nam: {now.strftime('%d/%m/%Y %H:%M:%S')}")
     print("=" * 60)
     print(f"📊 Theo dõi: {', '.join(WATCH_LIST)}")
     print(f"⏱️ Mở cửa: mỗi {CHECK_INTERVAL_OPEN//60} phút | Đóng cửa: mỗi {CHECK_INTERVAL_CLOSED//60//60} giờ")
@@ -288,12 +301,13 @@ def main():
     
     while True:
         try:
-            now = datetime.now()
+            now = get_vietnam_now()
             weekday = now.weekday()
             is_open, status_text = is_market_open()
             interval = CHECK_INTERVAL_OPEN if is_open else CHECK_INTERVAL_CLOSED
             interval_text = "5 phút" if is_open else "1 giờ"
             
+            # Thông báo đổi trạng thái ngày mới
             if weekday != last_weekday:
                 send_telegram_message("""🔔 <b>THÔNG BÁO TRẠNG THÁI</b>
 📅 Ngày: """ + now.strftime('%d/%m/%Y') + """
@@ -308,7 +322,9 @@ def main():
             print(f"Trạng thái: {status_text} | Tần suất: {interval_text}")
             print(f"{'='*60}")
             
+            # Tạo báo cáo
             msg = "<b>📊 BÁO CÁO CỔ PHIẾU</b>\n"
+            msg += f"🕐 Thời gian: {now.strftime('%d/%m/%Y %H:%M:%S')} (VN)\n"
             has_data = False
             
             for symbol in WATCH_LIST:
@@ -345,10 +361,10 @@ def main():
         
         except KeyboardInterrupt:
             print("\n👋 Bot dừng bởi người dùng")
-            send_telegram_message("🔴 <b>BOT ĐÃ DỪNG</b>")
+            send_telegram_message("🔴 <b>BOT ĐÃ DỪNG</b> — " + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S'))
             sys.exit(0)
         except Exception as e:
-            err = f"❌ <b>LỖI:</b> {e}"
+            err = "❌ <b>LỖI:</b> " + str(e) + "\n🕐 " + get_vietnam_now().strftime('%d/%m/%Y %H:%M:%S')
             print(f"\n{err}")
             send_telegram_message(err)
             time.sleep(ERROR_WAIT_TIME)
