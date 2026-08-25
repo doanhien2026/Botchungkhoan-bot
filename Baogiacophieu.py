@@ -4,8 +4,16 @@ import schedule
 import requests
 import pandas as pd
 import numpy as np
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from dotenv import load_dotenv
+
+# ========== CẤU HÌNH MÚI GIỜ VIỆT NAM ==========
+VN_TZ = timezone(timedelta(hours=7), 'Asia/Ho_Chi_Minh')
+
+def get_vietnam_time():
+    """Lấy thời gian hiện tại theo Giờ Việt Nam (UTC+7)"""
+    return datetime.now(VN_TZ)
+# ==============================================
 
 # ========== CẤU HÌNH BOT CỔ PHIẾU ==========
 
@@ -97,7 +105,7 @@ def send_telegram(message, max_retries=5):
 
 def send_test_signal():
     """Gửi tín hiệu test"""
-    now = datetime.now()
+    now = get_vietnam_time()
     test_message = f"""🚀 BOT ĐÃ KHỞI ĐỘNG THÀNH CÔNG!
 
 📅 Ngày giờ: {now.strftime('%d/%m/%Y %H:%M:%S')}
@@ -127,8 +135,8 @@ def analyze_stock(symbol):
     try:
         from vnstock import stock_historical_data
         
-        end_date = date.today().strftime('%Y-%m-%d')
-        start_date = (date.today() - timedelta(days=90)).strftime('%Y-%m-%d')
+        end_date = get_vietnam_time().strftime('%Y-%m-%d')
+        start_date = (get_vietnam_time() - timedelta(days=90)).strftime('%Y-%m-%d')
         
         print(f"🔍 Đang phân tích {symbol}...", end=" ")
         df = stock_historical_data(symbol, start_date, end_date, "1D")
@@ -216,7 +224,7 @@ def analyze_stock(symbol):
 
 def generate_message():
     """Tạo tin nhắn báo cáo"""
-    now = datetime.now()
+    now = get_vietnam_time()
     vietnam_date = now.strftime("%d/%m/%Y")
     vietnam_time = now.strftime("%H:%M:%S")
     weekday = now.weekday()
@@ -287,7 +295,7 @@ def generate_message():
 
 def scan_all():
     """Quét tất cả mã"""
-    print(f"\n[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] 🔄 Đang tạo báo cáo...")
+    print(f"\n[{get_vietnam_time().strftime('%d/%m/%Y %H:%M:%S')}] 🔄 Đang tạo báo cáo...")
     message = generate_message()
     if message:
         print(f"📏 Độ dài tin nhắn: {len(message)} ký tự")
