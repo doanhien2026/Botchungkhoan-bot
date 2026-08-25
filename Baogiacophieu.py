@@ -53,9 +53,9 @@ def send_telegram(message, max_retries=5):
     
     # ✅ SỬA: Kiểm tra độ dài message
     if len(message) > MAX_MESSAGE_LENGTH:
-        print(f"⚠️ WARNING: Message dài {len(message)} ký tự (giới hạn {MAX_MESSAGE_LENGTH})")
-        print("Sẽ cắt message để phù hợp...")
-        message = message[:MAX_MESSAGE_LENGTH-50] + "\n\n...(tin nhắn bị cắt ngắn)"
+        print(f"WARNING: Message dai {len(message)} ky tu (gioi han {MAX_MESSAGE_LENGTH})")
+        print("Se cat message de phu hop...")
+        message = message[:MAX_MESSAGE_LENGTH-50] + "\n\n...(tin nhan bi cat ngan)"
     
     for attempt in range(max_retries):
         try:
@@ -67,19 +67,39 @@ def send_telegram(message, max_retries=5):
             }
             response = requests.post(url, data=data, timeout=15)
             if response.status_code == 200:
-                print(f"✅ Đã gửi tin thành công ({len(message)} ký tự)")
+                print(f"OK Da gui tin thanh cong ({len(message)} ky tu)")
                 return response.json()
             else:
                 error_msg = response.text
-                print(f"⚠️ API trả về lỗi {response.status_code}: {error_msg}")
+                print(f"WARNING: API tra ve loi {response.status_code}: {error_msg}")
                 if attempt < max_retries - 1:
                     time.sleep(5)
         except Exception as e:
-            print(f"⚠️ Lỗi lần {attempt+1}: {e}")
+            print(f"WARNING: Loi lan {attempt+1}: {e}")
             if attempt < max_retries - 1:
                 time.sleep(5)
-    print("❌ Gửi thất bại sau tất cả lần thử")
+    print("FAILED: Gui that bai sau tat ca lan thu")
     return None
+
+def send_test_signal():
+    """Gửi tín hiệu test để kiểm tra bot"""
+    now = datetime.now()
+    test_message = f"""TEST SIGNAL - BOT DANG HOAT DONG
+
+Thoi gian: {now.strftime('%d/%m/%Y %H:%M:%S')}
+Status: BOT KICH HOAT - DANG CHAY 24/7
+
+Thong tin:
+- Theo doi: {len(WATCH_LIST)} ma co phieu
+- Token: {'CO' if TELEGRAM_TOKEN else 'KHONG CO'}
+- Chat ID: {'CO' if CHAT_ID else 'KHONG CO'}
+
+Neu nhan duoc tin nhan nay, Bot da hoat dong dung!!!
+"""
+    print("\n" + "="*50)
+    print("SENDING TEST SIGNAL TO TELEGRAM")
+    print("="*50)
+    send_telegram(test_message)
 
 def format_currency(value):
     """Format số thành chuỗi VND với dấu phẩy"""
@@ -95,7 +115,7 @@ def analyze_stock(symbol):
         
         df = stock_historical_data(symbol, start_date, end_date, "1D")
         if len(df) < 20:
-            print(f"⚠️ {symbol}: Dữ liệu không đủ (chỉ có {len(df)} ngày)")
+            print(f"WARNING: {symbol}: Du lieu khong du (chi co {len(df)} ngay)")
             return None
         
         df['ma5'] = calc_ma(df['close'], 5)
@@ -138,8 +158,8 @@ def analyze_stock(symbol):
         buy_wait = False
         sell_wait = False
         hold = False
-        mua_note = f"Chờ giá điều chỉnh về {format_currency(support)} VND"
-        ban_note = f"Chờ giá lên mục tiêu {format_currency(resistance)} VND"
+        mua_note = f"Cho gia dieu chinh ve {format_currency(support)} VND"
+        ban_note = f"Cho gia len muc tieu {format_currency(resistance)} VND"
         hold_note = ""
         target_sell = resistance
         stop_loss = support
@@ -154,7 +174,7 @@ def analyze_stock(symbol):
         # ✅ SỬA: So sánh MA5 vs MA10 với giá trị gốc (float)
         if ma5_raw > ma10_raw and rsi < 70:
             hold = True
-            hold_note = "Xu hướng tăng tốt"
+            hold_note = "Xu huong tang tot"
         
         if 'time' in df.columns and pd.notna(latest['time']):
             source_date = str(latest['time']).split()[0]
@@ -182,7 +202,7 @@ def analyze_stock(symbol):
         }
         
     except Exception as e:
-        print(f"❌ Lỗi phân tích {symbol}: {e}")
+        print(f"FAILED: Loi phan tich {symbol}: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -194,11 +214,11 @@ def generate_message():
     weekday = now.weekday()
     hour = now.hour
     is_trading_hour = (weekday < 5) and (9 <= hour < 15)
-    status_text = "NGOÀI GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐÓNG CỬA" if not is_trading_hour else "TRONG GIỜ GIAO DỊCH - THỊ TRƯỜNG ĐANG MỞ CỬA"
+    status_text = "NGOAI GIO GIAO DICH - THI TRUONG DONG CUA" if not is_trading_hour else "TRONG GIO GIAO DICH - THI TRUONG DANG MO CUA"
     
     watch_list_str = ", ".join(WATCH_LIST[:3])
     if len(WATCH_LIST) > 3:
-        watch_list_str += f" và {len(WATCH_LIST)-3} mã khác"
+        watch_list_str += f" va {len(WATCH_LIST)-3} ma khac"
     
     message = "BOT DA KHOI DONG!\n"
     message += f"Ngay gio: {vietnam_date} {vietnam_time}\n"
@@ -274,17 +294,22 @@ if __name__ == "__main__":
     print("=" * 50)
     print("BOT CO PHIEU - KHOI DONG THANH CONG")
     print(f"Theo doi {len(WATCH_LIST)} ma co phieu")
-    print(f"Token: {'✓ CO' if TELEGRAM_TOKEN else '✗ KHONG CO'}")
-    print(f"Chat ID: {'✓ CO' if CHAT_ID else '✗ KHONG CO'}")
+    print(f"Token: {'CO' if TELEGRAM_TOKEN else 'KHONG CO'}")
+    print(f"Chat ID: {'CO' if CHAT_ID else 'KHONG CO'}")
     print("Lich gui: moi 1 gio")
     print("Chay 24/7 - khong tu dung")
     print("=" * 50)
     print()
     
+    # ✅ TEST: Gửi test signal
+    print("\nGUI TEST SIGNAL...")
+    send_test_signal()
+    
     # ✅ SỬA: Test ngay lần đầu
+    print("\n\nGUI BAO CAO CHINH THUC...")
     scan_all()
     
-    print("\nDang khoi dong scheduler...")
+    print("\n\nDang khoi dong scheduler...")
     schedule.every().hour.do(scan_all)
     
     print("Bot dang chay. Nhan Ctrl+C de dung.\n")
