@@ -30,6 +30,7 @@ RSI_PERIOD = 14
 SUPPORT_RESISTANCE_LOOKBACK = 20
 MAX_MESSAGE_LENGTH = 4000
 REQUEST_TIMEOUT = 15
+UPDATE_INTERVAL_MINUTES = 5  # === CẤU HÌNH: Cập nhật mỗi 5 phút ===
 # ==========================================
 
 # ========== HÀM LẤY DỮ LIỆU TỪ NGUỒN ONLINE ==========
@@ -49,10 +50,8 @@ def fetch_price_cafef(symbol):
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Tìm giá hiện tại
         price_tag = soup.find("span", class_="price") or soup.find("strong", class_=re.compile("price|green|red"))
         if not price_tag:
-            # Thử tìm theo pattern khác
             text = response.text
             price_match = re.search(rf'{symbol}.*?(\d+\.\d+|\d+,\d+|\d+)\s*VND', text)
             if price_match:
@@ -84,7 +83,6 @@ def fetch_price_vietstock(symbol):
         if response.status_code != 200:
             return None, "Vietstock", None
         
-        # Tìm giá trong trang
         text = response.text
         patterns = [
             rf'"price"\s*:\s*(\d+\.?\d*)',
@@ -127,12 +125,11 @@ def fetch_price_tcbs(symbol):
         return None, "TCBS", None
 
 def fetch_historical_data(symbol, days=90):
-    """Lấy dữ liệu lịch sử giá từ TCBS API để tính RSI, MA, Hỗ trợ/Kháng cự"""
+    """Lấy dữ liệu lịch sử giá từ TCBS API"""
     try:
         end_date = get_vietnam_time()
         start_date = end_date - timedelta(days=days)
         
-        # Sử dụng API TCBS lấy dữ liệu lịch sử
         url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/stock-price/{symbol}?from={int(start_date.timestamp())}&to={int(end_date.timestamp())}&resolution=1D"
         headers = {
             "User-Agent": "Mozilla/5.0",
@@ -148,7 +145,6 @@ def fetch_historical_data(symbol, days=90):
         if not data or 'data' not in data:
             return None
         
-        # Chuyển đổi dữ liệu thành DataFrame
         records = []
         for item in data['data']:
             records.append({
@@ -191,13 +187,11 @@ def get_best_price(symbol):
     if not results:
         return None, "Không có nguồn", None
     
-    # Lấy giá trung bình nếu có nhiều nguồn
     if len(results) >= 2:
         avg_price = np.mean([r['price'] for r in results])
         main_source = f"Đã tổng hợp ({len(results)} nguồn)"
         return round(avg_price, 2), main_source, results[0]['time']
     
-    # Chỉ có 1 nguồn
     return results[0]['price'], results[0]['source'], results[0]['time']
 
 # ========== HÀM TÍN HIỆU KỸ THUẬT ==========
@@ -214,7 +208,7 @@ def calc_ma(series, period):
 
 def calc_support_resistance(df, lookback=SUPPORT_RESISTANCE_LOOKBACK):
     recent = df.tail(lookback)
-    support = round(recent['low'].min(), -2)  # Làm tròn đến hàng trăm
+    support = round(recent['low'].min(), -2)
     resistance = round(recent['high'].max(), -2)
     return int(support), int(resistance)
 
@@ -228,21 +222,18 @@ def analyze_trend(df, price, ma5, ma10, rsi):
     hold_signal = False
     signal_strength = "Yếu"
     
-    # Tín hiệu MUA
     conditions_buy = [
-        ma5 > ma10,  # MA5 cắt lên trên MA10
-        rsi < 30,    # RSI quá thấp -> quá bán
-        price <= round(latest['low'], -2) * 1.01  # Giá gần hỗ trợ
+        ma5 > ma10,
+        rsi < 30,
+        price <= round(latest['low'], -2) * 1.01
     ]
     
-    # Tín hiệu BÁN
     conditions_sell = [
-        ma5 < ma10,  # MA5 cắt xuống dưới MA10
-        rsi > 70,    # RSI quá cao -> quá mua
-        price >= round(latest['high'], -2) * 0.99  # Giá gần kháng cự
+        ma5 < ma10,
+        rsi > 70,
+        price >= round(latest['high'], -2) * 0.99
     ]
     
-    # Đếm số điều kiện thỏa mãn
     buy_count = sum(conditions_buy)
     sell_count = sum(conditions_sell)
     
@@ -308,11 +299,12 @@ def send_test_signal():
     test_message = f"""🚀 BOT CỔ PHIẾU — KHỞI ĐỘNG THÀNH CÔNG!
 
 📅 Ngày giờ: {now.strftime('%d/%m/%Y %H:%M:%S')}
-✅ Trạng thái: Đang hoạt động — Lấy dữ liệu từ TCBS, Cafef, Vietstock
+✅ Trạng thái: Đang hoạt động — CẬP NHẬT MỖI {UPDATE_INTERVAL_MINUTES} PHÚT
 
 📊 Thông tin:
 - Theo dõi: {len(WATCH_LIST)} mã cổ phiếu
 - Nguồn dữ liệu: TCBS API, Cafef, Vietstock
+- Tần suất: Mỗi {UPDATE_INTERVAL_MINUTES} phút gửi báo cáo mới
 - Token: ✅ Đã cấu hình
 - Chat ID: ✅ Đã cấu hình
 
@@ -337,7 +329,6 @@ def analyze_stock(symbol):
     try:
         print(f"\n🔍 Đang phân tích {symbol}...")
         
-        # Bước 1: Lấy giá hiện tại từ nhiều nguồn
         price_raw, source_name, source_time = get_best_price(symbol)
         if not price_raw:
             print(f"❌ Không lấy được giá {symbol}")
@@ -345,7 +336,6 @@ def analyze_stock(symbol):
         
         price = round(price_raw, 2)
         
-        # Bước 2: Lấy dữ liệu lịch sử để tính chỉ báo kỹ thuật
         df = fetch_historical_data(symbol, days=90)
         if df is None or len(df) < 20:
             print(f"⚠️ Không đủ dữ liệu lịch sử {symbol} — chỉ hiển thị giá hiện tại")
@@ -367,7 +357,6 @@ def analyze_stock(symbol):
                 "stop_loss": 0
             }
         
-        # Bước 3: Tính các chỉ báo kỹ thuật
         df['ma5'] = calc_ma(df['close'], 5)
         df['ma10'] = calc_ma(df['close'], 10)
         df['rsi'] = calc_rsi(df['close'], RSI_PERIOD)
@@ -375,7 +364,6 @@ def analyze_stock(symbol):
         latest = df.iloc[-1]
         prev = df.iloc[-2]
         
-        # Tính % thay đổi
         prev_price = float(prev['close'])
         change_pct = round((price - prev_price) / prev_price * 100, 2) if prev_price > 0 else 0.0
         
@@ -383,13 +371,9 @@ def analyze_stock(symbol):
         ma10 = int(round(float(latest['ma10']), 0)) if pd.notna(latest['ma10']) else 0
         rsi = round(float(latest['rsi']), 1) if pd.notna(latest['rsi']) and not np.isnan(latest['rsi']) else 50.0
         
-        # Tính Hỗ trợ & Kháng cự
         support, resistance = calc_support_resistance(df)
-        
-        # Phân tích tín hiệu
         trend = analyze_trend(df, price, ma5, ma10, rsi)
         
-        # Xác định thông điệp tín hiệu
         if trend['buy']:
             signal_text = "🟢 MUA"
             target_sell = resistance
@@ -438,15 +422,15 @@ def generate_message():
     if len(WATCH_LIST) > 3:
         watch_list_str += f" và {len(WATCH_LIST)-3} mã khác"
     
-    message = f"🚀 BOT ĐÃ KHỞI ĐỘNG!\n"
+    message = f"🚀 BÁO CÁO CỔ PHIẾU — CẬP NHẬT MỖI {UPDATE_INTERVAL_MINUTES} PHÚT\n"
     message += f"📅 Ngày giờ: {vietnam_date} {vietnam_time}\n"
     message += f"📊 Theo dõi: {watch_list_str}\n"
     message += f"💡 Nguồn: TCBS API, Cafef, Vietstock\n\n"
-    message += f"⏱️ Tần suất: Mỗi 1 giờ gửi báo cáo\n"
+    message += f"⏱️ Tần suất: Mỗi {UPDATE_INTERVAL_MINUTES} phút tự động cập nhật\n"
     message += f"✅ Sẵn sàng!\n\n"
     message += "─" * 20 + "\n\n"
     
-    message += f"📊 BÁO CÁO CỔ PHIẾU\n"
+    message += f"📊 BÁO CÁO TÍN HIỆU\n"
     message += f"🕐 Thời gian: {vietnam_date} {vietnam_time} (VN)\n\n"
     
     stock_count = 0
@@ -454,14 +438,18 @@ def generate_message():
     sell_count = 0
     hold_count = 0
     
-    for symbol in WATCH_LIST:
+    # Ưu tiên hiển thị 3 mã chính trước
+    priority_symbols = ["ACV", "FPT", "VCB"]
+    other_symbols = [s for s in WATCH_LIST if s not in priority_symbols]
+    ordered_list = priority_symbols + other_symbols
+    
+    for symbol in ordered_list:
         data = analyze_stock(symbol)
         if not data:
             continue
         
         stock_count += 1
         
-        # Đếm tín hiệu
         if "MUA" in data['signal']:
             buy_count += 1
         elif "BÁN" in data['signal']:
@@ -483,7 +471,7 @@ def generate_message():
         
         if data['ma5'] > 0:
             stock_info += f"💰 Giá hiện tại: {format_currency(data['price'])} VND\n"
-            stock_info += f"🎯 Mục tiêu: {format_currency(data['target_sell'])} VND\n"
+            stock_info += f"🎯 Mục tiêu bán: {format_currency(data['target_sell'])} VND\n"
             stock_info += f"🔴 Cắt lỗ dưới: {format_currency(data['stop_loss'])} VND\n"
         
         stock_info += "\n"
@@ -492,9 +480,9 @@ def generate_message():
             message += stock_info
         else:
             print(f"⚠️ Tin nhắn quá dài, dừng ở mã {symbol}")
+            message += "\n⚠️ Tin nhắn bị giới hạn độ dài — vui lòng xem các báo cáo tiếp theo!\n"
             break
     
-    # Tóm tắt tổng quan
     message += "─" * 20 + "\n"
     message += f"📈 TỔNG CỘNG: {stock_count}/{len(WATCH_LIST)} mã\n"
     message += f"🟢 MUA: {buy_count} | 🔴 BÁN: {sell_count} | 🟡 NẮM GIỮ: {hold_count}\n"
@@ -504,7 +492,9 @@ def generate_message():
 
 def scan_all():
     """Quét tất cả mã và gửi báo cáo"""
-    print(f"\n[{get_vietnam_time().strftime('%d/%m/%Y %H:%M:%S')}] 🔄 Đang tạo báo cáo...")
+    print(f"\n{'='*60}")
+    print(f"[{get_vietnam_time().strftime('%d/%m/%Y %H:%M:%S')}] 🔄 CẬP NHẬT BÁO CÁO...")
+    print(f"{'='*60}")
     message = generate_message()
     if message:
         print(f"📏 Độ dài tin nhắn: {len(message)} ký tự")
@@ -516,9 +506,10 @@ def scan_all():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 BOT CỔ PHIẾU — KHỞI ĐỘNG THÀNH CÔNG")
+    print(f"🚀 BOT CỔ PHIẾU — KHỞI ĐỘNG THÀNH CÔNG")
     print("=" * 60)
     print(f"📋 Theo dõi: {len(WATCH_LIST)} mã cổ phiếu")
+    print(f"⏱️ Tần suất cập nhật: Mỗi {UPDATE_INTERVAL_MINUTES} phút")
     print(f"🔑 Token: {'✅ CÓ' if TELEGRAM_TOKEN else '❌ KHÔNG CÓ'}")
     print(f"💬 Chat ID: {'✅ CÓ' if CHAT_ID else '❌ KHÔNG CÓ'}")
     print(f"🌐 Nguồn dữ liệu: TCBS API, Cafef, Vietstock")
@@ -529,22 +520,24 @@ if __name__ == "__main__":
     print("\n📤 GỬI TÍN HIỆU TEST...")
     send_test_signal()
     
-    # Gửi báo cáo chính
-    print("\n\n📤 GỬI BÁO CÁO CHÍNH THỨC...")
+    # Gửi báo cáo chính lần đầu
+    print("\n\n📤 GỬI BÁO CÁO CHÍNH THỨC LẦN ĐẦU...")
     scan_all()
     
-    # Lặp lịch
-    print("\n\n⏰ KHỞI ĐỘNG LỊCH TRÌNH — Mỗi 1 giờ gửi báo cáo")
-    schedule.every().hour.do(scan_all)
+    # Lên lịch tự động chạy mỗi 5 phút
+    print(f"\n\n⏰ KHỞI ĐỘNG LỊCH TRÌNH — Mỗi {UPDATE_INTERVAL_MINUTES} phút gửi báo cáo mới")
+    schedule.every(UPDATE_INTERVAL_MINUTES).minutes.do(scan_all)
     
-    print("✅ Bot đang chạy 24/7. Nhấn Ctrl+C để dừng.\n")
+    print(f"✅ Bot đang chạy 24/7 — tự động cập nhật mỗi {UPDATE_INTERVAL_MINUTES} phút")
+    print("✅ Nhấn Ctrl+C để dừng bot.\n")
+    
     while True:
         try:
             schedule.run_pending()
-            time.sleep(30)
+            time.sleep(1)  # Kiểm tra mỗi giây để chính xác hơn
         except KeyboardInterrupt:
             print("\n👋 Đã dừng bot.")
             break
         except Exception as e:
             print(f"⚠️ Lỗi: {e}")
-            time.sleep(30)
+            time.sleep(10)
