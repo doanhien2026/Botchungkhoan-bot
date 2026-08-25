@@ -1,24 +1,31 @@
 # ==========================================
-# BOT CHỨNG KHOÁN - CHỐNG CHẶN API VÀ KHÓA IP (FIXED)
+# BOT CHỨNG KHOÁN 24/7 - RENDER WEB SERVICE
 # ==========================================
 import os
 import sys
 import json
 import time
 import requests
+import threading
+from flask import Flask
 from datetime import datetime, timedelta, timezone
 
+# --- KHỞI TẠO FLASK ĐỂ LÀM WEB SERVICE TRÊN RENDER ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot Chứng Khoán đang hoạt động 24/7!", 200
+
+# --- CẤU HÌNH THÔNG SỐ ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1030583610")
-
 WATCH_LIST = ["ACV", "FPT", "VCB"]
 
-# Header chuẩn giả lập trình duyệt Chrome Việt Nam
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Referer": "https://bgapidatafeed.vps.com.vn/"
+    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
 def send_telegram(message):
@@ -30,30 +37,29 @@ def send_telegram(message):
         "disable_web_page_preview": True
     }
     try:
-        res = requests.post(url, json=payload, timeout=15)
+        res = requests.post(url, json=payload, timeout=10)
         return res.status_code == 200
     except Exception as e:
         print(f"❌ Lỗi gửi Telegram: {e}")
         return False
 
-# Hàm chuẩn hóa giá tiền chính xác (Đưa về đơn vị nghìn đồng: 70.7, 59.4, 41.9)
 def parse_price(val):
     if val is None or val == "":
         return 0.0
     try:
         val = float(val)
-        # Nếu giá trả về dạng > 500 (ví dụ 70700 hoặc 70700.0) thì chia cho 1000
         if val >= 500:
             return val / 1000.0
         return val
     except ValueError:
         return 0.0
 
-def get_stock_data_with_proxy(symbol):
-    # --- CÁCH 1: Trực tiếp VPS API (Ưu tiên số 1) ---
+# --- LẤY GIÁ TRỰC TIẾP KHÔNG QUA PROXY TRUNG GIAN TRÁCH TIMEOUT ---
+def get_stock_data_direct(symbol):
+    # Cách 1: API VPS Trực tiếp
     try:
         url = f"https://bgapidatafeed.vps.com.vn/getstockdata/{symbol}"
-        res = requests.get(url, headers=HEADERS, timeout=6)
+        res = requests.get(url, headers=HEADERS, timeout=8)
         if res.status_code == 200:
             data = res.json()
             if isinstance(data, list) and len(data) > 0:
@@ -61,14 +67,14 @@ def get_stock_data_with_proxy(symbol):
                 price = parse_price(item.get("lastPrice") or item.get("closePrice") or item.get("r"))
                 ref = parse_price(item.get("r"))
                 if price > 0 and ref > 0:
-                    return price, ref, "VPS Direct"
+                    return price, ref, "VPS"
     except Exception as e:
-        print(f"⚠️ VPS Direct lỗi [{symbol}]: {e}")
+        print(f"⚠️ VPS lỗi [{symbol}]: {e}")
 
-    # --- CÁCH 2: Gọi TCBS API (Cực kỳ ổn định trên Render) ---
+    # Cách 2: API TCBS Trực tiếp
     try:
         url = f"https://apipub.tcbs.com.vn/stock-insight/v1/stock/second-side-price?ticker={symbol}"
-        res = requests.get(url, headers=HEADERS, timeout=6, verify=False)
+        res = requests.get(url, headers=HEADERS, timeout=8, verify=False)
         if res.status_code == 200:
             data = res.json().get("data", {})
             price = parse_price(data.get("p") or data.get("r"))
@@ -78,47 +84,25 @@ def get_stock_data_with_proxy(symbol):
     except Exception as e:
         print(f"⚠️ TCBS lỗi [{symbol}]: {e}")
 
-    # --- CÁCH 3: Gọi VPS qua Proxy Allorigins (Bypass WAF) ---
+    # Cách 3: API Vietstock Dự phòng
     try:
-        target_url = f"https://bgapidatafeed.vps.com.vn/getstockdata/{symbol}"
-        proxy_url = f"https://api.allorigins.win/get?url={requests.utils.quote(target_url)}"
-        
-        res = requests.get(proxy_url, headers=HEADERS, timeout=10)
+        url = f"https://finance.vietstock.vn/data/getstockinfo?code={symbol}"
+        res = requests.get(url, headers=HEADERS, timeout=8)
         if res.status_code == 200:
-            contents = res.json().get("contents", "")
-            if contents:
-                data = json.loads(contents)
-                if isinstance(data, list) and len(data) > 0:
-                    item = data[0]
-                    price = parse_price(item.get("lastPrice") or item.get("closePrice") or item.get("r"))
-                    ref = parse_price(item.get("r"))
-                    if price > 0 and ref > 0:
-                        return price, ref, "VPS (Proxy)"
+            data = res.json()
+            price = parse_price(data.get("LastPrice") or data.get("ReferencePrice"))
+            ref = parse_price(data.get("ReferencePrice"))
+            if price > 0 and ref > 0:
+                return price, ref, "Vietstock"
     except Exception as e:
-        print(f"⚠️ VPS Proxy lỗi [{symbol}]: {e}")
-
-    # --- CÁCH 4: Gọi SSI qua CorsProxy (Dự phòng) ---
-    try:
-        target_url = f"https://iboard.ssi.com.vn/dchart/api/quote?symbol={symbol}"
-        proxy_url = f"https://corsproxy.io/?{requests.utils.quote(target_url)}"
-        res = requests.get(proxy_url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            data = res.json().get("data", [])
-            if data:
-                item = data[0]
-                price = parse_price(item.get("lastPrice") or item.get("referencePrice"))
-                ref = parse_price(item.get("referencePrice") or item.get("prevClose"))
-                if price > 0 and ref > 0:
-                    return price, ref, "SSI (Proxy)"
-    except Exception as e:
-        print(f"⚠️ SSI Proxy lỗi [{symbol}]: {e}")
+        print(f"⚠️ Vietstock lỗi [{symbol}]: {e}")
 
     return None, None, None
 
 def analyze_signal(price, ref, is_market_closed):
     pct = ((price - ref) / ref * 100) if ref > 0 else 0
-    stop_loss = ref * 0.96   # SL -4%
-    take_profit = ref * 1.07 # TP +7%
+    stop_loss = ref * 0.96   
+    take_profit = ref * 1.07 
     
     if is_market_closed:
         if pct >= 2.0:
@@ -149,7 +133,7 @@ def analyze_signal(price, ref, is_market_closed):
         
     return pct, signal, advice, take_profit, stop_loss
 
-def main():
+def run_stock_bot():
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -171,7 +155,7 @@ def main():
     valid_count = 0
     
     for symbol in WATCH_LIST:
-        price, ref, source = get_stock_data_with_proxy(symbol)
+        price, ref, source = get_stock_data_direct(symbol)
         
         if not price:
             print(f"❌ Không lấy được dữ liệu cho mã {symbol}")
@@ -189,14 +173,23 @@ def main():
         msg += f"🎯 Mục tiêu TP: *{tp:,.2f}* | 🛡 Cắt lỗ SL: *{sl:,.2f}*\n"
         msg += "-----------------------------------\n"
 
-        # Tạm nghỉ 2 giây giữa mỗi lần cào giá để tránh bị hệ thống chặn IP
-        time.sleep(2)
+        time.sleep(1.5)
 
     if valid_count > 0:
         send_telegram(msg)
-        print(f"✅ Đã vượt tường lửa và gửi báo cáo thành công cho {valid_count}/{len(WATCH_LIST)} mã!")
+        print(f"✅ Đã gửi báo cáo thành công cho {valid_count}/{len(WATCH_LIST)} mã!")
     else:
-        print("⚠️ Không lấy được dữ liệu từ bất kỳ nguồn nào.")
+        print("⚠️ Không lấy được dữ liệu từ các nguồn.")
+
+# --- CHẠY LUỒNG QUÉT GIÁ NGHẦM ĐỂ CÓ THỂ MỞ PORT 10000 ---
+def start_bot_thread():
+    run_stock_bot()
 
 if __name__ == "__main__":
-    main()
+    # Kích hoạt luồng gửi Telegram
+    t = threading.Thread(target=start_bot_thread)
+    t.start()
+    
+    # Bắt buộc khởi chạy Flask trên Port môi trường của Render
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
