@@ -1,229 +1,142 @@
 import os
 import time
-import telebot
-from datetime import datetime, timedelta
+import schedule
+import requests
+from datetime import datetime
+import re
+from collections import Counter
 from flask import Flask
-import random
 
-# ==================== THÔNG TIN BOT CỦA BẠN ====================
-BOT_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
-CHAT_ID = -1001030583610
-# ===============================================================
+# ========== CẤU HÌNH BOT XSMB ==========
+TELEGRAM_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
+CHAT_ID = "1030583610"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+status_sent = ""
+
 app = Flask(__name__)
 
-# ============ DỮ LIỆU LỊCH SỬ ============
-LICH_SU_2_SO_CUOI = [
-    '52','03','18','73','25','48','00','15','61','37',
-    '03','25','08','73','42','56','12','89','48','00',
-    '25','03','73','15','61','08','37','56','12','42',
-    '00','03','25','08','73','15','61','42','56','12',
-    '03','25','73','00','08','15','37','61','42','56',
-    '12','03','25','73','00','08','15','37','61','42'
-]
+@app.route('/')
+def health_check():
+    return "✅ Bot XSMB đang hoạt động", 200
 
-# ============ TRỌNG SỐ THEO THỨ — MỖI THỨ KHÁC NHAU ============
-TRONG_SO_THEO_THU = {
-    0: {'tan_suat': 0.40, 'chu_ky': 0.45, 'phan_bo': 0.15},  # Thứ 2
-    1: {'tan_suat': 0.50, 'chu_ky': 0.35, 'phan_bo': 0.15},  # Thứ 3
-    2: {'tan_suat': 0.35, 'chu_ky': 0.50, 'phan_bo': 0.15},  # Thứ 4
-    3: {'tan_suat': 0.55, 'chu_ky': 0.30, 'phan_bo': 0.15},  # Thứ 5
-    4: {'tan_suat': 0.45, 'chu_ky': 0.40, 'phan_bo': 0.15},  # Thứ 6
-    5: {'tan_suat': 0.30, 'chu_ky': 0.55, 'phan_bo': 0.15},  # Thứ 7
-    6: {'tan_suat': 0.60, 'chu_ky': 0.25, 'phan_bo': 0.15},  # Chủ Nhật
-}
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-TY_LE_TRUNG = {
-    'lo1': '~20%', 'lo2': '~18%', 'lo3': '~16%',
-    'xien1': '~17%', 'xien2': '~15%', 'sc': '~35%'
-}
+def send_xsmb(message, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            data = {
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True
+            }
+            response = requests.post(url, json=data, timeout=30)
+            if response.status_code == 200:
+                print(f"✅ [BOT XSMB] Đã gửi tin thành công")
+                return response.json()
+            else:
+                print(f"⚠️ Lỗi {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"❌ Lỗi kết nối (lần {attempt+1}): {e}")
+            time.sleep(3)
+    print(f"❌ Thất bại sau {max_retries} lần thử")
+    return None
 
-cache_D = None
-cache_D1 = None
-ngay_cache = None
+def download_xsmb_data():
+    try:
+        url = "https://xsmb.com.vn/so-ket-qua-xsmb-60-ngay"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.text
+    except Exception as e:
+        print(f"❌ Không tải được dữ liệu: {e}")
+        return None
 
-# ============ TÍNH TOÁN TẦN SUẤT ============
-def tinh_tan_suat():
-    tan_suat_lo = {f"{i:02d}": 0 for i in range(100)}
-    tan_suat_sc = {str(i): 0 for i in range(10)}
-    for so in LICH_SU_2_SO_CUOI:
-        tan_suat_lo[so] += 1
-        tan_suat_sc[so[-1]] += 1
-    tong_ngay = len(LICH_SU_2_SO_CUOI)
-    ts_pt_lo = {s: round((tan_suat_lo[s]/tong_ngay)*100,1) for s in tan_suat_lo}
-    ts_pt_sc = {s: round((tan_suat_sc[s]/tong_ngay)*100,1) for s in tan_suat_sc}
-    return ts_pt_lo, ts_pt_sc
-
-# ============ TÍNH CHU KỲ NGHỈ ĐỘNG — TỐC ĐỘ NHANH HƠN ============
-def tinh_chu_ky_nghi(ngay_da_chon):
-    chu_ky_lo = {f"{i:02d}": 99 for i in range(100)}
-    chu_ky_sc = {str(i): 99 for i in range(10)}
+def parse_and_calculate(html):
+    if not html:
+        return None
     
-    # Ngày cuối trong dữ liệu lịch sử
-    ngay_cuoi_du_lieu = datetime(2026, 8, 24)
-    ngay_them = (ngay_da_chon - ngay_cuoi_du_lieu).days  # Số ngày trôi qua
+    numbers = re.findall(r"\b\d{2}\b", html)
+    if not numbers:
+        return None
     
-    for idx, so in enumerate(LICH_SU_2_SO_CUOI):
-        if chu_ky_lo[so] == 99:
-            chu_ky_lo[so] = idx + ngay_them  # Cộng ngày thêm
-        sc = so[-1]
-        if chu_ky_sc[sc] == 99:
-            chu_ky_sc[sc] = idx + ngay_them
+    freq = Counter(numbers)
+    top3_loto = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:3]
     
-    return chu_ky_lo, chu_ky_sc
-
-# ============ TÍNH PHÂN BỐ THEO THỨ ============
-def tinh_phan_bo_theo_thu(ngay):
-    thu_dutruoc = ngay.weekday()
-    dem_thu = {t: {'tong':0, 'ra':0} for t in range(7)}
-    for idx, so in enumerate(LICH_SU_2_SO_CUOI):
-        thu_cua_ngay = (thu_dutruoc - idx) % 7
-        dem_thu[thu_cua_ngay]['tong'] += 1
-        dem_thu[thu_cua_ngay]['ra'] += 1
-    if dem_thu[thu_dutruoc]['tong'] > 0:
-        return dem_thu[thu_dutruoc]['ra'] / dem_thu[thu_dutruoc]['tong']
-    return 0.15
-
-# ============ TÍNH ĐIỂM — CÓ THAY ĐỔI ĐỦ LỚN ============
-def tinh_diem(so, ts_pt, chu_ky, ty_le_thu, thu):
-    # Lấy trọng số phù hợp với thứ trong tuần
-    ts = TRONG_SO_THEO_THU[thu]['tan_suat']
-    ck = TRONG_SO_THEO_THU[thu]['chu_ky']
-    tb = TRONG_SO_THEO_THU[thu]['phan_bo']
-    
-    # Tăng tốc độ chu kỳ: mỗi ngày nghỉ = 3 điểm thay vì 2 → thay đổi lớn hơn
-    diem_ts = ts_pt * ts
-    diem_ck = min(chu_ky * 3, 60) * ck  # ✅ Tăng từ 2 → 3, giới hạn 50→60
-    diem_th = min(ty_le_thu * 30, 30) * tb
-    
-    # ✅ Thêm yếu tố biến động ngẫu nhiên nhỏ nhưng đủ thay đổi thứ tự
-    random.seed(f"{so}-{thu}-{datetime.now().strftime('%Y%m%d')}")
-    bien_dong = random.uniform(-1.5, 1.5)  # ±1.5 điểm — đủ lớn để đảo thứ tự
-    
-    tong_diem = round(diem_ts + diem_ck + diem_th + bien_dong, 2)
+    dau_counts = Counter([n[0] for n in numbers])
+    best_dau = sorted(dau_counts.items(), key=lambda x: x[1], reverse=True)[0]
     
     return {
-        'so': so,
-        'ts_pt': ts_pt,
-        'chu_ky': chu_ky,
-        'tong_diem': tong_diem
+        "loto": [n[0] for n in top3_loto],
+        "dau": best_dau[0],
+        "date": datetime.now().strftime("%d/%m/%Y")
     }
 
-def du_doan_ngay(ngay):
-    thu = ngay.weekday()
-    ts_pt_lo, ts_pt_sc = tinh_tan_suat()
-    chu_ky_lo, chu_ky_sc = tinh_chu_ky_nghi(ngay)
-    ty_le_thu = tinh_phan_bo_theo_thu(ngay)
+def generate_signal():
+    global status_sent
     
-    ds_lo = []
-    for i in range(100):
-        s = f"{i:02d}"
-        ds_lo.append(tinh_diem(s, ts_pt_lo[s], chu_ky_lo[s], ty_le_thu, thu))
-    ds_lo = sorted(ds_lo, key=lambda x: x['tong_diem'], reverse=True)
+    html = download_xsmb_data()
+    pred = parse_and_calculate(html)
     
-    ds_sc = []
-    for s in '0123456789':
-        ds_sc.append(tinh_diem(s, ts_pt_sc[s], chu_ky_sc[s], ty_le_thu, thu))
-    ds_sc = sorted(ds_sc, key=lambda x: x['tong_diem'], reverse=True)
+    if not pred:
+        return
     
-    return {
-        'lo3': ds_lo[:3],
-        'xien2': ds_lo[3:5],
-        'sc1': ds_sc[:1],
-        'ngay': ngay.strftime("%d/%m/%Y"),
-        'thu': ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ Nhật'][thu],
-        'ty_le_thu': round(ty_le_thu*100, 1),
-        'thu_so': thu  # Để kiểm tra
-    }
+    message = f"""
+🔮 *TÍN HIỆU XSMB D+1*
 
-def gui_du_doan(data, ten_ngay):
-    text = f"""🤖 DỰ ĐOÁN XSMB — {ten_ngay}
-📅 Ngày: {data['ngay']} | {data['thu']}
-📊 Dữ liệu: 60 ngày gần nhất
-🧠 Logic: Trọng số theo thứ + Chu kỳ động + Biến động ngày
-⚠️ CHỈ THAM KHẢO - KHÔNG ĐẢM BẢO! Xổ số ngẫu nhiên - Chơi có trách nhiệm!
+📅 Ngày dự báo: *{pred['date']}*
 
-🎯 TOP 3 LÔ CAO NHẤT
-🥇 {data['lo3'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo1']} | Nghỉ {data['lo3'][0]['chu_ky']} ngày
-🥈 {data['lo3'][1]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo2']} | Nghỉ {data['lo3'][1]['chu_ky']} ngày
-🥉 {data['lo3'][2]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['lo3']} | Nghỉ {data['lo3'][2]['chu_ky']} ngày
+━━━━━━━━━━━━━━━━
 
-🎯 2 LÔ XIÊN CAO
-🥇 {data['xien2'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['xien1']} | Nghỉ {data['xien2'][0]['chu_ky']} ngày
-🥈 {data['xien2'][1]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['xien2']} | Nghỉ {data['xien2'][1]['chu_ky']} ngày
+🔥 *3 LÔ RƠI*
 
-🎯 SỐ CUỐI ĐẶC BIỆT
-🥇 {data['sc1'][0]['so']} | Tỷ lệ trúng: {TY_LE_TRUNG['sc']} | Nghỉ {data['sc1'][0]['chu_ky']} ngày
+1️⃣ *{pred['loto'][0]}*
+2️⃣ *{pred['loto'][1]}*
+3️⃣ *{pred['loto'][2]}*
 
-🎲 Chơi có trách nhiệm - Chỉ giải trí!
+━━━━━━━━━━━━━━━━
+
+🎲 *ĐẦU ĐỀ*
+
+*Đầu {pred['dau']}*
+
+━━━━━━━━━━━━━━━━
+
+⚠️ *Chỉ tham khảo - không đảm bảo trúng*
+🎲 *Chơi có trách nhiệm*
 """
-    try:
-        bot.send_message(CHAT_ID, text, parse_mode='Markdown')
-        print(f"✅ Đã gửi: {ten_ngay} | {data['ngay']} | Lô: {data['lo3'][0]['so']},{data['lo3'][1]['so']},{data['lo3'][2]['so']}")
-        return True
-    except Exception as e:
-        print(f"❌ Lỗi gửi: {e}")
-        return False
-
-def gui_ket_qua_thuc_te(ngay_str):
-    text = f"""🏆 KẾT QUẢ XSMB ĐÃ QUAY — NGÀY {ngay_str}
-📅 Đợi cập nhật kết quả từ nguồn chính thức...
-📝 Sau khi có kết quả, logic sẽ tự đối chiếu và cải thiện!
-"""
-    try:
-        bot.send_message(CHAT_ID, text, parse_mode='Markdown')
-        print(f"🏆 Đã gửi thông báo kết quả: {ngay_str}")
-        return True
-    except Exception as e:
-        print(f"❌ Lỗi gửi kết quả: {e}")
-        return False
-
-def da_qua_18h35():
-    now = datetime.now()
-    return now.hour > 18 or (now.hour == 18 and now.minute >= 35)
+    
+    current_signal = f"{pred['loto']}-{pred['dau']}"
+    if current_signal != status_sent:
+        send_xsmb(message)
+        status_sent = current_signal
+        print(f"✅ Đã gửi tín hiệu mới: {status_sent}")
+    else:
+        print(f"⏭ Tín hiệu không đổi, bỏ qua gửi")
 
 def main():
-    global cache_D, cache_D1, ngay_cache
-    print("🚀 Bot khởi động thành công!")
+    import threading
     
-    da_gui_ketqua = False
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("❌ Thiếu TOKEN hoặc CHAT_ID")
+        return
     
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    print("🌐 Web server đã khởi động cho Render...")
+    
+    schedule.every(1).hours.do(generate_signal)
+    
+    print("🚀 BOT XSMB ĐANG CHẠY...")
     while True:
-        try:
-            now = datetime.now()
-            hien_hanh_ngay = now.strftime("%d/%m/%Y")
-            
-            if hien_hanh_ngay != ngay_cache:
-                ngay_cache = hien_hanh_ngay
-                cache_D = None
-                cache_D1 = None
-                da_gui_ketqua = False
-                print(f"\n🔄 NGÀY MỚI: {hien_hanh_ngay} — Tính toán hoàn toàn mới!")
-            
-            if not da_qua_18h35():
-                if cache_D is None:
-                    cache_D = du_doan_ngay(now)
-                    print(f"🧠 NGÀY D  → {cache_D['ngay']} | {cache_D['thu']} | Lô: {cache_D['lo3'][0]['so']},{cache_D['lo3'][1]['so']},{cache_D['lo3'][2]['so']}")
-                gui_du_doan(cache_D, "DỰ ĐOÁN — NGÀY D")
-                time.sleep(60)
-            
-            elif not da_gui_ketqua:
-                gui_ket_qua_thuc_te(hien_hanh_ngay)
-                da_gui_ketqua = True
-                time.sleep(2)
-            
-            else:
-                ngay_mai = now + timedelta(days=1)
-                if cache_D1 is None:
-                    cache_D1 = du_doan_ngay(ngay_mai)
-                    print(f"🧠 NGÀY D+1 → {cache_D1['ngay']} | {cache_D1['thu']} | Lô: {cache_D1['lo3'][0]['so']},{cache_D1['lo3'][1]['so']},{cache_D1['lo3'][2]['so']}")
-                gui_du_doan(cache_D1, "DỰ ĐOÁN — NGÀY D+1")
-                time.sleep(60)
-                
-        except Exception as e:
-            print(f"⚠️ Lỗi: {e}")
-            time.sleep(15)
+        schedule.run_pending()
+        time.sleep(60)
 
 if __name__ == "__main__":
     main()
