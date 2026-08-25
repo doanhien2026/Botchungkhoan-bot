@@ -20,17 +20,15 @@ def get_vietnam_time():
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
 CHAT_ID = os.getenv("CHAT_ID", "1030583610")
 
-# Danh sách mã theo dõi
-WATCH_LIST = ["ACV", "FPT", "VCB", "ACB", "BCM", "BID", "BVH", "CTG", "GAS", "GVR", 
-              "HDB", "HPG", "MBB", "MSN", "POW", "SAB", "SHB", "SSB", "SSI", "TCB", 
-              "TPB", "VHM", "VIB", "VIC", "VNM", "VPB", "VRE", "VTG", "MWG"]
+# ✅ CHỈ GIỮ LẠI 3 MÃ THEO YÊU CẦU
+WATCH_LIST = ["ACV", "FPT", "VCB"]
 
 # Tham số kỹ thuật
 RSI_PERIOD = 14
 SUPPORT_RESISTANCE_LOOKBACK = 20
 MAX_MESSAGE_LENGTH = 4000
 REQUEST_TIMEOUT = 15
-UPDATE_INTERVAL_MINUTES = 5  # === CẤU HÌNH: Cập nhật mỗi 5 phút ===
+UPDATE_INTERVAL_MINUTES = 5  # Cập nhật mỗi 5 phút
 # ==========================================
 
 # ========== HÀM LẤY DỮ LIỆU TỪ NGUỒN ONLINE ==========
@@ -103,7 +101,7 @@ def fetch_price_vietstock(symbol):
         return None, "Vietstock", None
 
 def fetch_price_tcbs(symbol):
-    """Lấy giá từ TCBS API"""
+    """Lấy giá từ TCBS API — nhanh nhất"""
     try:
         url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/quote"
         headers = {
@@ -301,14 +299,9 @@ def send_test_signal():
 📅 Ngày giờ: {now.strftime('%d/%m/%Y %H:%M:%S')}
 ✅ Trạng thái: Đang hoạt động — CẬP NHẬT MỖI {UPDATE_INTERVAL_MINUTES} PHÚT
 
-📊 Thông tin:
-- Theo dõi: {len(WATCH_LIST)} mã cổ phiếu
-- Nguồn dữ liệu: TCBS API, Cafef, Vietstock
-- Tần suất: Mỗi {UPDATE_INTERVAL_MINUTES} phút gửi báo cáo mới
-- Token: ✅ Đã cấu hình
-- Chat ID: ✅ Đã cấu hình
-
-Nếu nhận được tin này → Bot hoạt động đúng! 🎉
+📊 Theo dõi: {', '.join(WATCH_LIST)}
+💡 Nguồn dữ liệu: TCBS API, Cafef, Vietstock
+⏱️ Tần suất: Mỗi {UPDATE_INTERVAL_MINUTES} phút gửi báo cáo mới
 """
     print("\n" + "="*60)
     print("📤 GỬI TÍN HIỆU TEST...")
@@ -413,18 +406,14 @@ def analyze_stock(symbol):
 # ========== TẠO BÁO CÁO ==========
 
 def generate_message():
-    """Tạo tin nhắn báo cáo — Đã bỏ phần trạng thái thừa"""
+    """Tạo tin nhắn báo cáo — Chỉ 3 mã ACV, FPT, VCB"""
     now = get_vietnam_time()
     vietnam_date = now.strftime("%d/%m/%Y")
     vietnam_time = now.strftime("%H:%M:%S")
     
-    watch_list_str = ", ".join(WATCH_LIST[:3])
-    if len(WATCH_LIST) > 3:
-        watch_list_str += f" và {len(WATCH_LIST)-3} mã khác"
-    
     message = f"🚀 BÁO CÁO CỔ PHIẾU — CẬP NHẬT MỖI {UPDATE_INTERVAL_MINUTES} PHÚT\n"
     message += f"📅 Ngày giờ: {vietnam_date} {vietnam_time}\n"
-    message += f"📊 Theo dõi: {watch_list_str}\n"
+    message += f"📊 Theo dõi: {', '.join(WATCH_LIST)}\n"
     message += f"💡 Nguồn: TCBS API, Cafef, Vietstock\n\n"
     message += f"⏱️ Tần suất: Mỗi {UPDATE_INTERVAL_MINUTES} phút tự động cập nhật\n"
     message += f"✅ Sẵn sàng!\n\n"
@@ -438,12 +427,7 @@ def generate_message():
     sell_count = 0
     hold_count = 0
     
-    # Ưu tiên hiển thị 3 mã chính trước
-    priority_symbols = ["ACV", "FPT", "VCB"]
-    other_symbols = [s for s in WATCH_LIST if s not in priority_symbols]
-    ordered_list = priority_symbols + other_symbols
-    
-    for symbol in ordered_list:
+    for symbol in WATCH_LIST:
         data = analyze_stock(symbol)
         if not data:
             continue
@@ -475,13 +459,7 @@ def generate_message():
             stock_info += f"🔴 Cắt lỗ dưới: {format_currency(data['stop_loss'])} VND\n"
         
         stock_info += "\n"
-        
-        if len(message) + len(stock_info) < MAX_MESSAGE_LENGTH - 100:
-            message += stock_info
-        else:
-            print(f"⚠️ Tin nhắn quá dài, dừng ở mã {symbol}")
-            message += "\n⚠️ Tin nhắn bị giới hạn độ dài — vui lòng xem các báo cáo tiếp theo!\n"
-            break
+        message += stock_info
     
     message += "─" * 20 + "\n"
     message += f"📈 TỔNG CỘNG: {stock_count}/{len(WATCH_LIST)} mã\n"
@@ -508,7 +486,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"🚀 BOT CỔ PHIẾU — KHỞI ĐỘNG THÀNH CÔNG")
     print("=" * 60)
-    print(f"📋 Theo dõi: {len(WATCH_LIST)} mã cổ phiếu")
+    print(f"📋 Theo dõi: {', '.join(WATCH_LIST)}")
     print(f"⏱️ Tần suất cập nhật: Mỗi {UPDATE_INTERVAL_MINUTES} phút")
     print(f"🔑 Token: {'✅ CÓ' if TELEGRAM_TOKEN else '❌ KHÔNG CÓ'}")
     print(f"💬 Chat ID: {'✅ CÓ' if CHAT_ID else '❌ KHÔNG CÓ'}")
@@ -528,13 +506,13 @@ if __name__ == "__main__":
     print(f"\n\n⏰ KHỞI ĐỘNG LỊCH TRÌNH — Mỗi {UPDATE_INTERVAL_MINUTES} phút gửi báo cáo mới")
     schedule.every(UPDATE_INTERVAL_MINUTES).minutes.do(scan_all)
     
-    print(f"✅ Bot đang chạy 24/7 — tự động cập nhật mỗi {UPDATE_INTERVAL_MINUTES} phút")
+    print(f"✅ Bot đang chạy 24/7 — chỉ theo dõi: {', '.join(WATCH_LIST)}")
     print("✅ Nhấn Ctrl+C để dừng bot.\n")
     
     while True:
         try:
             schedule.run_pending()
-            time.sleep(1)  # Kiểm tra mỗi giây để chính xác hơn
+            time.sleep(1)
         except KeyboardInterrupt:
             print("\n👋 Đã dừng bot.")
             break
