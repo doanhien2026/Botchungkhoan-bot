@@ -1,6 +1,5 @@
 requests==2.34.2
 pandas==2.2.3
 numpy==1.26.4
-python-dotenv==1.0.1
-vnstock==0.2.8
+beautifulsoup4==4.15.0
 schedule==1.2.2
