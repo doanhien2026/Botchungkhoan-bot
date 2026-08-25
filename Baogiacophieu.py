@@ -36,12 +36,20 @@ def calc_ma(series, period):
 
 def calc_support_resistance(df, lookback=SUPPORT_RESISTANCE_LOOKBACK):
     recent = df.tail(lookback)
-    support = round(recent['low'].min(), -5)
-    resistance = round(recent['high'].max(), -5)
+    # ✅ SỬA: Làm tròn đúng cách (từ -5 → 0)
+    support = round(recent['low'].min(), 0)
+    resistance = round(recent['high'].max(), 0)
     return int(support), int(resistance)
 
 # === HÀM GỬI TIN ===
 def send_telegram(message, max_retries=5):
+    # ✅ SỬA: Kiểm tra token và chat_id
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("❌ LỖI: TELEGRAM_TOKEN hoặc CHAT_ID chưa được cấu hình!")
+        print(f"   TELEGRAM_TOKEN: {bool(TELEGRAM_TOKEN)}")
+        print(f"   CHAT_ID: {bool(CHAT_ID)}")
+        return None
+    
     for attempt in range(max_retries):
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -55,10 +63,13 @@ def send_telegram(message, max_retries=5):
             if response.status_code == 200:
                 print(f"✅ Đã gửi tin thành công")
                 return response.json()
+            else:
+                print(f"⚠️ API trả về lỗi {response.status_code}: {response.text}")
         except Exception as e:
             print(f"⚠️ Lỗi lần {attempt+1}: {e}")
-            time.sleep(10)
-    print("❌ Gửi thất bại")
+            if attempt < max_retries - 1:
+                time.sleep(10)
+    print("❌ Gửi thất bại sau tất cả lần thử")
     return None
 
 def analyze_stock(symbol):
@@ -68,6 +79,7 @@ def analyze_stock(symbol):
         
         df = stock_historical_data(symbol, start_date, end_date, "1D")
         if len(df) < 20:
+            print(f"⚠️ {symbol}: Dữ liệu không đủ (chỉ có {len(df)} ngày)")
             return None
         
         df['ma5'] = calc_ma(df['close'], 5)
@@ -77,12 +89,14 @@ def analyze_stock(symbol):
         latest = df.iloc[-1]
         prev = df.iloc[-2]
         
-        price = int(round(latest['close'], -5))
-        prev_price = int(round(prev['close'], -5))
+        # ✅ SỬA: Làm tròn đúng cách (từ -5 → 0)
+        price = round(latest['close'], 0)
+        prev_price = round(prev['close'], 0)
         change_pct = round((price - prev_price) / prev_price * 100, 2) if prev_price > 0 else 0
         
-        ma5 = int(round(latest['ma5'], -5))
-        ma10 = int(round(latest['ma10'], -5))
+        # ✅ SỬA: Làm tròn MA5, MA10 đúng cách
+        ma5 = round(latest['ma5'], 0)
+        ma10 = round(latest['ma10'], 0)
         rsi = round(latest['rsi'], 1) if not np.isnan(latest['rsi']) else 50.0
         
         support, resistance = calc_support_resistance(df)
@@ -90,8 +104,8 @@ def analyze_stock(symbol):
         buy_wait = False
         sell_wait = False
         hold = False
-        mua_note = f"Chờ giá điều chỉnh về {support:,} VND"
-        ban_note = f"Chờ giá lên mục tiêu {resistance:,} VND"
+        mua_note = f"Chờ giá điều chỉnh về {support:,.0f} VND"
+        ban_note = f"Chờ giá lên mục tiêu {resistance:,.0f} VND"
         hold_note = ""
         target_sell = resistance
         stop_loss = support
@@ -132,6 +146,8 @@ def analyze_stock(symbol):
         
     except Exception as e:
         print(f"❌ Lỗi phân tích {symbol}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def generate_message():
@@ -166,30 +182,34 @@ def generate_message():
     message += f"📊 BÁO CÁO CỔ PHIẾU\n"
     message += f"🕐 Thời gian: {vietnam_date} {vietnam_time} (VN)\n\n"
     
+    # ✅ SỬA: Thêm counter để theo dõi
+    stock_count = 0
     for symbol in WATCH_LIST:
         data = analyze_stock(symbol)
         if not data:
             continue
         
+        stock_count += 1
         message += "─" * 20 + "\n"
-        message += f"📊 {data['symbol']} – Giá: {data['price']:,} VND | {data['change_pct']:+.2f}%\n"
+        message += f"📊 {data['symbol']} – Giá: {data['price']:,.0f} VND | {data['change_pct']:+.2f}%\n"
         message += f"📡 Nguồn: 🔒 Giá phiên cuối (lưu lúc {data['source_date']} 15:00:00)\n"
-        message += f"📈 MA5: {data['ma5']:,} | MA10: {data['ma10']:,} | RSI: {data['rsi']}\n"
-        message += f"🛡️ Hỗ trợ: {data['support']:,} | Kháng cự: {data['resistance']:,}\n\n"
+        message += f"📈 MA5: {data['ma5']:,.0f} | MA10: {data['ma10']:,.0f} | RSI: {data['rsi']}\n"
+        message += f"🛡️ Hỗ trợ: {data['support']:,.0f} | Kháng cự: {data['resistance']:,.0f}\n\n"
         
         message += "🎯 KHUYẾN NGHỊ:\n"
-        message += f"⏸️ MUA: {data['mua_note']} — Giá hiện tại {data['price']:,} VND gần hỗ trợ\n"
-        message += f"⏸️ BÁN: {data['ban_note']} — Giá hiện tại {data['price']:,} VND gần kháng cự\n"
+        message += f"⏸️ MUA: {data['mua_note']} — Giá hiện tại {data['price']:,.0f} VND gần hỗ trợ\n"
+        message += f"⏸️ BÁN: {data['ban_note']} — Giá hiện tại {data['price']:,.0f} VND gần kháng cự\n"
         
         if data['hold']:
             message += f"🟢 NẮM GIỮ – {data['hold_note']}\n"
         else:
             message += f"🟡 NẮM GIỮ – Chờ tín hiệu rõ hơn\n"
         
-        message += f"💰 Giá hiện tại: {data['price']:,} VND\n"
-        message += f"🎯 Mục tiêu bán: {data['target_sell']:,} VND\n"
-        message += f"🔴 Cắt lỗ dưới: {data['stop_loss']:,} VND\n\n"
+        message += f"💰 Giá hiện tại: {data['price']:,.0f} VND\n"
+        message += f"🎯 Mục tiêu bán: {data['target_sell']:,.0f} VND\n"
+        message += f"🔴 Cắt lỗ dưới: {data['stop_loss']:,.0f} VND\n\n"
     
+    message += f"📈 Tổng cộng: {stock_count}/{len(WATCH_LIST)} mã được phân tích\n"
     message += "⚠️ Chỉ tham khảo — tự quyết định giao dịch!\n"
     
     return message
@@ -197,7 +217,10 @@ def generate_message():
 def scan_all():
     print(f"\n🔄 Đang tạo báo cáo... {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     message = generate_message()
-    send_telegram(message)
+    if message:
+        send_telegram(message)
+    else:
+        print("❌ Không thể tạo message")
 
 if __name__ == "__main__":
     print("=" * 50)
@@ -207,6 +230,7 @@ if __name__ == "__main__":
     print("🔄 Chạy 24/7 — không tự dừng")
     print("=" * 50)
     
+    # ✅ SỬA: Test ngay lần đầu
     scan_all()
     
     schedule.every().hour.do(scan_all)
