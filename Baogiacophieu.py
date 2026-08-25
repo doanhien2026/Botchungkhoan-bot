@@ -1,6 +1,6 @@
-# ==========================================
-# BOT CHỨNG KHOÁN 24/7 - RENDER WEB SERVICE
-# ==========================================
+# =========================================================
+# BOT CHỨNG KHOÁN - VERSION 2.1.0 (FIX TIMEZONE & API BLOCK)
+# =========================================================
 import os
 import sys
 import json
@@ -8,24 +8,27 @@ import time
 import requests
 import threading
 from flask import Flask
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+import zoneinfo # Cần thiết để chuẩn hóa múi giờ Việt Nam
 
-# --- KHỞI TẠO FLASK ĐỂ LÀM WEB SERVICE TRÊN RENDER ---
+# --- KHỞI TẠO FLASK WEB SERVICE (DÀNH CHO RENDER) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot Chứng Khoán đang hoạt động 24/7!", 200
+    return "Bot Chứng Khoán Ver 2.1.0 - Active 24/7", 200
 
-# --- CẤU HÌNH THÔNG SỐ ---
+# --- THÔNG SỐ CẤU HÌNH ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1030583610")
 WATCH_LIST = ["ACV", "FPT", "VCB"]
 
+# Giả lập Header trình duyệt di động để tránh bị chặn IP
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+    "Accept": "*/*",
+    "Accept-Language": "vi-VN,vi;q=0.9",
+    "Connection": "keep-alive"
 }
 
 def send_telegram(message):
@@ -37,7 +40,7 @@ def send_telegram(message):
         "disable_web_page_preview": True
     }
     try:
-        res = requests.post(url, json=payload, timeout=10)
+        res = requests.post(url, json=payload, timeout=12)
         return res.status_code == 200
     except Exception as e:
         print(f"❌ Lỗi gửi Telegram: {e}")
@@ -48,18 +51,44 @@ def parse_price(val):
         return 0.0
     try:
         val = float(val)
-        if val >= 500:
-            return val / 1000.0
-        return val
+        return val / 1000.0 if val >= 500 else val
     except ValueError:
         return 0.0
 
-# --- LẤY GIÁ TRỰC TIẾP KHÔNG QUA PROXY TRUNG GIAN TRÁCH TIMEOUT ---
-def get_stock_data_direct(symbol):
-    # Cách 1: API VPS Trực tiếp
+# --- THU THẬP DỮ LIỆU ĐA NGUỒN VƯỢT TƯỜNG LỬA (VER 2.1.0) ---
+def fetch_stock_data(symbol):
+    # Nguồn 1: SSI iBoard API Gốc
+    try:
+        url = f"https://iboard.ssi.com.vn/dchart/api/quote?symbol={symbol}"
+        res = requests.get(url, headers=HEADERS, timeout=6)
+        if res.status_code == 200:
+            data = res.json().get("data", [])
+            if data:
+                item = data[0]
+                price = parse_price(item.get("lastPrice") or item.get("referencePrice"))
+                ref = parse_price(item.get("referencePrice") or item.get("prevClose"))
+                if price > 0 and ref > 0:
+                    return price, ref, "SSI"
+    except Exception:
+        pass
+
+    # Nguồn 2: TCBS API Gốc
+    try:
+        url = f"https://apipub.tcbs.com.vn/stock-insight/v1/stock/second-side-price?ticker={symbol}"
+        res = requests.get(url, headers=HEADERS, timeout=6, verify=False)
+        if res.status_code == 200:
+            data = res.json().get("data", {})
+            price = parse_price(data.get("p") or data.get("r"))
+            ref = parse_price(data.get("r"))
+            if price > 0 and ref > 0:
+                return price, ref, "TCBS"
+    except Exception:
+        pass
+
+    # Nguồn 3: VPS Stock API Gốc
     try:
         url = f"https://bgapidatafeed.vps.com.vn/getstockdata/{symbol}"
-        res = requests.get(url, headers=HEADERS, timeout=8)
+        res = requests.get(url, headers=HEADERS, timeout=6)
         if res.status_code == 200:
             data = res.json()
             if isinstance(data, list) and len(data) > 0:
@@ -68,128 +97,61 @@ def get_stock_data_direct(symbol):
                 ref = parse_price(item.get("r"))
                 if price > 0 and ref > 0:
                     return price, ref, "VPS"
-    except Exception as e:
-        print(f"⚠️ VPS lỗi [{symbol}]: {e}")
-
-    # Cách 2: API TCBS Trực tiếp
-    try:
-        url = f"https://apipub.tcbs.com.vn/stock-insight/v1/stock/second-side-price?ticker={symbol}"
-        res = requests.get(url, headers=HEADERS, timeout=8, verify=False)
-        if res.status_code == 200:
-            data = res.json().get("data", {})
-            price = parse_price(data.get("p") or data.get("r"))
-            ref = parse_price(data.get("r"))
-            if price > 0 and ref > 0:
-                return price, ref, "TCBS"
-    except Exception as e:
-        print(f"⚠️ TCBS lỗi [{symbol}]: {e}")
-
-    # Cách 3: API Vietstock Dự phòng
-    try:
-        url = f"https://finance.vietstock.vn/data/getstockinfo?code={symbol}"
-        res = requests.get(url, headers=HEADERS, timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            price = parse_price(data.get("LastPrice") or data.get("ReferencePrice"))
-            ref = parse_price(data.get("ReferencePrice"))
-            if price > 0 and ref > 0:
-                return price, ref, "Vietstock"
-    except Exception as e:
-        print(f"⚠️ Vietstock lỗi [{symbol}]: {e}")
+    except Exception:
+        pass
 
     return None, None, None
-
-def analyze_signal(price, ref, is_market_closed):
-    pct = ((price - ref) / ref * 100) if ref > 0 else 0
-    stop_loss = ref * 0.96   
-    take_profit = ref * 1.07 
-    
-    if is_market_closed:
-        if pct >= 2.0:
-            signal = "🟢 **TĂNG MẠNH CUỐI PHIÊN**"
-            advice = "Tín hiệu tích cực. Nắm giữ cho T+."
-        elif pct <= -2.0:
-            signal = "🔴 **GIẢM MẠNH CUỐI PHIÊN**"
-            advice = "Lực bán áp đảo. Cân nhắc hạ tỷ trọng."
-        else:
-            signal = "🟡 **ĐÓNG CỬA TÍCH LŨY**"
-            advice = "Giá đi ngang, tiếp tục quan sát."
-    else:
-        if pct >= 4.5:
-            signal = "💰 **BÁN CHỐT LỜI (Đạt TP T+)**"
-            advice = "Đạt mục tiêu chốt lời ngắn hạn. NÊN BÁN."
-        elif pct <= -3.5:
-            signal = "🚨 **BÁN CẮT LỖ (Vi Phạm SL)**"
-            advice = "Vi phạm ngưỡng rủi ro. NÊN CẮT LỖ."
-        elif pct >= 2.0:
-            signal = "🚀 **MUA BREAKOUT (Lướt T+)**"
-            advice = "Dòng tiền vào mạnh. Canh mua gia tăng."
-        elif -2.0 <= pct <= -0.5:
-            signal = "🛒 **MUA TÍCH LŨY (Canh Chỉnh)**"
-            advice = "Giá điều chỉnh nhẹ. Vùng mua an toàn."
-        else:
-            signal = "✊ **CANH QUAN SÁT**"
-            advice = "Biến động hẹp, theo dõi thêm."
-        
-    return pct, signal, advice, take_profit, stop_loss
 
 def run_stock_bot():
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    vn_tz = timezone(timedelta(hours=7))
+    # LẤY MÚI GIỜ VIỆT NAM CHUẨN ĐÚNG 100%
+    try:
+        vn_tz = zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")
+    except Exception:
+        # Dự phòng nếu môi trường thiếu thư viện zoneinfo
+        from datetime import timezone, timedelta
+        vn_tz = timezone(timedelta(hours=7))
+
     now_vn = datetime.now(vn_tz)
     now_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
     current_hour = now_vn.hour
     
     is_market_closed = current_hour >= 15 or current_hour < 8
     
-    if is_market_closed:
-        msg = f"📊 *BÁO CÁO KẾT THÚC PHIÊN GIAO DỊCH*\n"
-    else:
-        msg = f"⚡ *TÍN HIỆU LƯỚT SÓNG T+ REAL-TIME*\n"
-        
+    msg = f"📊 *BÁO CÁO CHỨNG KHOÁN (VER 2.1.0)*\n"
     msg += f"⏰ *Thời gian VN:* `{now_str}`\n"
     msg += "-----------------------------------\n\n"
     
     valid_count = 0
     
     for symbol in WATCH_LIST:
-        price, ref, source = get_stock_data_direct(symbol)
+        price, ref, source = fetch_stock_data(symbol)
         
         if not price:
-            print(f"❌ Không lấy được dữ liệu cho mã {symbol}")
+            msg += f"⚠️ *{symbol}*: Không lấy được dữ liệu\n"
             continue
             
         valid_count += 1
-        pct, signal, advice, tp, sl = analyze_signal(price, ref, is_market_closed)
+        pct = ((price - ref) / ref * 100) if ref > 0 else 0
         icon = "🟢" if pct > 0 else ("🔴" if pct < 0 else "🟡")
         
         msg += f"📌 *Mã: {symbol}* {icon} _({source})_\n"
         msg += f"💵 Giá: *{price:,.2f}* (TC: {ref:,.2f})\n"
         msg += f"📊 Biến động: *{pct:+.2f}%*\n"
-        msg += f"🎯 Tín hiệu: {signal}\n"
-        msg += f"💡 *Đánh giá:* _{advice}_\n"
-        msg += f"🎯 Mục tiêu TP: *{tp:,.2f}* | 🛡 Cắt lỗ SL: *{sl:,.2f}*\n"
         msg += "-----------------------------------\n"
 
         time.sleep(1.5)
 
-    if valid_count > 0:
-        send_telegram(msg)
-        print(f"✅ Đã gửi báo cáo thành công cho {valid_count}/{len(WATCH_LIST)} mã!")
-    else:
-        print("⚠️ Không lấy được dữ liệu từ các nguồn.")
+    send_telegram(msg)
 
-# --- CHẠY LUỒNG QUÉT GIÁ NGHẦM ĐỂ CÓ THỂ MỞ PORT 10000 ---
 def start_bot_thread():
     run_stock_bot()
 
 if __name__ == "__main__":
-    # Kích hoạt luồng gửi Telegram
     t = threading.Thread(target=start_bot_thread)
     t.start()
     
-    # Bắt buộc khởi chạy Flask trên Port môi trường của Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
