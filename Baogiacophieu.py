@@ -20,7 +20,7 @@ def get_vietnam_time():
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
 CHAT_ID = os.getenv("CHAT_ID", "1030583610")
 
-# ✅ CHỈ GIỮ LẠI 3 MÃ THEO YÊU CẦU
+# ✅ CHỈ GIỮ LẠI 3 MÃ
 WATCH_LIST = ["ACV", "FPT", "VCB"]
 
 # Tham số kỹ thuật
@@ -28,7 +28,7 @@ RSI_PERIOD = 14
 SUPPORT_RESISTANCE_LOOKBACK = 20
 MAX_MESSAGE_LENGTH = 4000
 REQUEST_TIMEOUT = 15
-UPDATE_INTERVAL_MINUTES = 5  # Cập nhật mỗi 5 phút
+UPDATE_INTERVAL_MINUTES = 5
 # ==========================================
 
 # ========== HÀM LẤY DỮ LIỆU TỪ NGUỒN ONLINE ==========
@@ -38,7 +38,7 @@ def fetch_price_cafef(symbol):
     try:
         url = f"https://cafef.vn/du-lieu/{symbol}.chn"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.encoding = 'utf-8'
@@ -47,8 +47,8 @@ def fetch_price_cafef(symbol):
             return None, "Cafef", None
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         price_tag = soup.find("span", class_="price") or soup.find("strong", class_=re.compile("price|green|red"))
+        
         if not price_tag:
             text = response.text
             price_match = re.search(rf'{symbol}.*?(\d+\.\d+|\d+,\d+|\d+)\s*VND', text)
@@ -73,7 +73,7 @@ def fetch_price_vietstock(symbol):
     try:
         url = f"https://vietstock.vn/chart/{symbol}.htm"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         response.encoding = 'utf-8'
@@ -101,11 +101,11 @@ def fetch_price_vietstock(symbol):
         return None, "Vietstock", None
 
 def fetch_price_tcbs(symbol):
-    """Lấy giá từ TCBS API — nhanh nhất"""
+    """Lấy giá từ TCBS API"""
     try:
         url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/quote"
         headers = {
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Origin": "https://tcbs.com.vn",
             "Referer": "https://tcbs.com.vn/"
         }
@@ -130,7 +130,7 @@ def fetch_historical_data(symbol, days=90):
         
         url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/stock-price/{symbol}?from={int(start_date.timestamp())}&to={int(end_date.timestamp())}&resolution=1D"
         headers = {
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Origin": "https://tcbs.com.vn",
             "Referer": "https://tcbs.com.vn/"
         }
