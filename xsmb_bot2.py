@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 9.2.0 (FIX TRIỆT ĐỂ LỖI FETCH DATA)
+# BOT XSMB - VERSION 10.1.0 (ĐA NGUỒN TỰ ĐỘNG FALLBACK)
 # =========================================================
 import os
 import re
@@ -16,29 +16,80 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
 
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfyeby4DsBh6MLUH-XYdgk6znzDyeNsehSI6CqGiHFgU-XJ4k_WBD0sXasDx55bfW4F-ktGOQ/exec"
-
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 9.2.0 - Active 24/7", 200
+    return "XSMB Bot Ver 10.1.0 - Multi-Source Active 24/7", 200
 
-# --- HÀM LẤY KẾT QUẢ QUA GOOGLE PROXY ---
+# --- HÀM LẤY KẾT QUẢ VỚI CƠ CHẾ ĐA NGUỒN TỰ ĐỘNG ---
 def fetch_xsmb(d, m, y):
-    date_formatted = f"{d}-{m}-{y}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    d_int = int(d)
+    m_int = int(m)
+    date_formatted = f"{d.zfill(2)}-{m.zfill(2)}-{y}"
+
+    # --- NGUỒN 1: XOSODAIPHAT ---
     try:
-        # Gửi chuẩn tham số date=DD-MM-YYYY
-        params = {"date": date_formatted}
-        res = requests.get(GOOGLE_SCRIPT_URL, params=params, timeout=15, allow_redirects=True)
-        
-        if res.status_code == 200:
-            data = res.json()
-            db = data.get("db", "Chưa có")
-            g1 = data.get("g1", "Chưa có")
-            return {"db": db, "g1": g1}
+        url1 = f"https://xosodaiphat.com/xsmb-{date_formatted}.html"
+        res1 = requests.get(url1, headers=headers, timeout=6)
+        if res1.status_code == 200:
+            html = res1.text
+            db_m = re.search(r'id="mb_giai_dacbiet"[^>]*>[\s\S]*?(\d{5})[\s\S]*?</td>', html) or \
+                   re.search(r'class="v-gdb"[^>]*>[\s\S]*?(\d{5})[\s\S]*?</td>', html)
+            g1_m = re.search(r'id="mb_giai_nhat"[^>]*>[\s\S]*?(\d{5})[\s\S]*?</td>', html) or \
+                   re.search(r'class="v-g1"[^>]*>[\s\S]*?(\d{5})[\s\S]*?</td>', html)
+            
+            db = db_m.group(1) if db_m else "Chưa có"
+            g1 = g1_m.group(1) if g1_m else "Chưa có"
+            
+            if db != "Chưa có":
+                print("Lấy thành công từ Nguồn 1 (Xosodaiphat)")
+                return {"db": db, "g1": g1}
     except Exception as e:
-        print(f"Lỗi truy vấn Google Script: {e}")
+        print(f"Nguồn 1 lỗi: {e}")
+
+    # --- NGUỒN 2: XSKT (KHI NGUỒN 1 THẤT BẠI) ---
+    try:
+        url2 = f"https://xskt.com.vn/xsmb/ngay-{d_int}-{m_int}-{y}"
+        res2 = requests.get(url2, headers=headers, timeout=6)
+        if res2.status_code == 200:
+            html = res2.text
+            db_m = re.search(r'class="v-gdb[^"]*"[^>]*>(\d{5})<', html) or \
+                   re.search(r'v-gdb[^>]*>[\s\S]*?(\d{5})', html)
+            g1_m = re.search(r'class="v-g1[^"]*"[^>]*>(\d{5})<', html) or \
+                   re.search(r'v-g1[^>]*>[\s\S]*?(\d{5})', html)
+            
+            db = db_m.group(1) if db_m else "Chưa có"
+            g1 = g1_m.group(1) if g1_m else "Chưa có"
+            
+            if db != "Chưa có":
+                print("Lấy thành công từ Nguồn 2 (XSKT)")
+                return {"db": db, "g1": g1}
+    except Exception as e:
+        print(f"Nguồn 2 lỗi: {e}")
+
+    # --- NGUỒN 3: XOSO.COM.VN (DỰ PHÒNG CUỐI CÙNG) ---
+    try:
+        url3 = f"https://xoso.com.vn/xsmb-{d.zfill(2)}-{m.zfill(2)}-{y}.html"
+        res3 = requests.get(url3, headers=headers, timeout=6)
+        if res3.status_code == 200:
+            html = res3.text
+            db_m = re.search(r'class="cls_giai_dac_biet"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html) or \
+                   re.search(r'class="special-code"[^>]*>(\d{5})<', html)
+            g1_m = re.search(r'class="cls_giai_nhat"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html)
+            
+            db = db_m.group(1) if db_m else "Chưa có"
+            g1 = g1_m.group(1) if g1_m else "Chưa có"
+            
+            if db != "Chưa có":
+                print("Lấy thành công từ Nguồn 3 (Xoso.com.vn)")
+                return {"db": db, "g1": g1}
+    except Exception as e:
+        print(f"Nguồn 3 lỗi: {e}")
 
     return {"db": "Chưa có", "g1": "Chưa có"}
 
@@ -51,11 +102,7 @@ def handle_user_message(message):
         y, m, d = match.group(1), match.group(2), match.group(3)
         display_date = f"{y}/{m}/{d}"
         
-        # Đảm bảo d, m đủ 2 chữ số dạng chuỗi
-        d_str = str(int(d)).zfill(2)
-        m_str = str(int(m)).zfill(2)
-        
-        data = fetch_xsmb(d_str, m_str, y)
+        data = fetch_xsmb(d, m, y)
         
         reply = f"📊 *KẾT QUẢ XSMB NGÀY {display_date}*\n"
         reply += f"🏆 *Giải Đặc Biệt:* `{data['db']}`\n"
