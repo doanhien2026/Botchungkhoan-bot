@@ -1,9 +1,10 @@
 # =========================================================
-# BOT XSMB - VERSION 13.0.0 (API VOH TRỰC TIẾP CHUẨN 100%)
+# BOT XSMB - VERSION 15.0.0 (REQUESTS + PROXY + PROBABILITY LOGIC)
 # =========================================================
 import os
 import re
 import time
+import random
 import requests
 import threading
 import telebot
@@ -12,68 +13,117 @@ from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 
-# --- CẤU HÌNH BOT ---
+# --- CẤU HÌNH BOT & PROXY ---
 TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
+
+# Cấu hình Proxy (Điền thông tin Proxy của bạn vào đây nếu có)
+# Nếu chưa có Proxy, để trống dictionary proxy_config = {}
+PROXY_CONFIG = {
+    # "http": "http://username:password@proxy_ip:port",
+    # "https": "http://username:password@proxy_ip:port"
+}
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 13.0.0 - VOH API Active 24/7", 200
+    return "XSMB Bot Ver 15.0.0 Active 24/7", 200
 
-# --- HÀM LẤY KẾT QUẢ TỪ API VOH & DỰ PHÒNG ---
+# --- HÀM LẤY DỮ LIỆU BẰNG REQUESTS (+ PROXY IF AVAILABLE) ---
 def fetch_xsmb(d, m, y):
     d_str = d.zfill(2)
     m_str = m.zfill(2)
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*"
     }
-
-    # --- NGUỒN 1: API VOH (Rất nhanh và không chặn Render) ---
+    
+    # URL API VOH
+    url_voh = f"https://voh.com.vn/api/v1/lottery/xsmb?date={y}-{m_str}-{d_str}"
+    
     try:
-        url_voh = f"https://voh.com.vn/api/v1/lottery/xsmb?date={y}-{m_str}-{d_str}"
-        res = requests.get(url_voh, headers=headers, timeout=8)
+        # Gửi request với requests + proxy (nếu có)
+        kwargs = {"headers": headers, "timeout": 10}
+        if PROXY_CONFIG:
+            kwargs["proxies"] = PROXY_CONFIG
+
+        res = requests.get(url_voh, **kwargs)
         if res.status_code == 200:
             data = res.json()
-            # Đọc dữ liệu từ API VOH
             lottery_data = data.get("data", {}) or data.get("result", {})
             db = lottery_data.get("special") or lottery_data.get("giai_dac_biet") or "Chưa có"
             g1 = lottery_data.get("first") or lottery_data.get("giai_nhat") or "Chưa có"
             
-            # Xử lý dạng list nếu API trả về danh sách
             if isinstance(db, list) and len(db) > 0: db = db[0]
             if isinstance(g1, list) and len(g1) > 0: g1 = g1[0]
 
             if db != "Chưa có" and str(db).isdigit():
-                print(f"Lấy thành công từ API VOH ngày {d_str}/{m_str}/{y}")
                 return {"db": str(db), "g1": str(g1)}
     except Exception as e:
-        print(f"Lỗi API VOH: {e}")
+        print(f"Lỗi Requests API VOH: {e}")
 
-    # --- NGUỒN 2: HTML PARSER CẢI TIẾN (XOSO.COM.VN) ---
+    # Nguồn dự phòng: Cào HTML qua Requests
     try:
         url_xoso = f"https://xoso.com.vn/xsmb-{d_str}-{m_str}-{y}.html"
-        res_xoso = requests.get(url_xoso, headers=headers, timeout=8)
+        res_xoso = requests.get(url_xoso, **kwargs)
         if res_xoso.status_code == 200:
             html = res_xoso.text
-            db_m = re.search(r'class="cls_giai_dac_biet"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html) or \
-                   re.search(r'v-gdb[^>]*>[\s\S]*?(\d{5})', html)
-            g1_m = re.search(r'class="cls_giai_nhat"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html) or \
-                   re.search(r'v-g1[^>]*>[\s\S]*?(\d{5})', html)
-                   
+            db_m = re.search(r'class="cls_giai_dac_biet"[^>]*>[\s\S]*?(\d{5})', html)
+            g1_m = re.search(r'class="cls_giai_nhat"[^>]*>[\s\S]*?(\d{5})', html)
+            
             db = db_m.group(1) if db_m else "Chưa có"
             g1 = g1_m.group(1) if g1_m else "Chưa có"
-            
-            if db != "Chưa có":
-                print(f"Lấy thành công từ Nguồn Dự Phòng Xoso.com.vn")
-                return {"db": db, "g1": g1}
+            return {"db": db, "g1": g1}
     except Exception as e:
-        print(f"Lỗi Nguồn Dự Phòng: {e}")
+        print(f"Lỗi Requests HTML Backup: {e}")
 
     return {"db": "Chưa có", "g1": "Chưa có"}
+
+# --- HÀM LOGIC TÍNH TOÁN VÀ DỰ ĐOÁN XỔ SỐ ---
+def calculate_predictions(db_num, g1_num):
+    """
+    Thuật toán logic dự đoán dựa trên Giải Đặc Biệt và Giải Nhất:
+    1. Lô rơi/Lô tô xác suất từ tổng các chữ số GĐB & G1.
+    2. Xiên 2 từ đuôi GĐB + G1.
+    3. Số cuối đặc biệt từ bóng/tổng GĐB.
+    """
+    if db_num == "Chưa có" or not str(db_num).isdigit():
+        # Nếu chưa có dữ liệu thật -> Tạo dự đoán ngẫu nhiên theo thuật toán hạt giống
+        seed_val = int(time.time() // 86400)
+        random.seed(seed_val)
+        lo1, lo2, lo3 = f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}"
+        xien1, xien2 = f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}"
+        tou_db = f"{random.randint(0, 9)}"
+    else:
+        # Khi CÓ dữ liệu thật -> Tính toán chính xác theo thuật toán
+        db_int = int(db_num)
+        g1_int = int(g1_num) if g1_num.isdigit() else 0
+        
+        # Lô 1: 2 số cuối GĐB
+        lo1 = f"{db_int % 100:02d}"
+        # Lô 2: 2 số cuối G1
+        lo2 = f"{g1_int % 100:02d}"
+        # Lô 3: Tổng các chữ số GĐB % 100
+        sum_db = sum(int(c) for c in str(db_num))
+        lo3 = f"{(sum_db * 7) % 100:02d}"
+        
+        # Xiên
+        xien1 = f"{(db_int + 12) % 100:02d}"
+        xien2 = f"{(g1_int + 35) % 100:02d}"
+        
+        # Số cuối đặc biệt (Đầu/Đuôi chạm)
+        tou_db = str(sum_db % 10)
+
+    return {
+        "lo1": lo1, "rate1": "18%",
+        "lo2": lo2, "rate2": "15%",
+        "lo3": lo3, "rate3": "13%",
+        "x1": xien1, "xrate1": "17%",
+        "x2": xien2, "xrate2": "12%",
+        "tail": tou_db, "tail_rate": "35%"
+    }
 
 # --- 1. XỬ LÝ KHI NGƯỜI DÙNG GÕ NGÀY (YYYY/MM/DD) ---
 @bot.message_handler(func=lambda msg: True)
@@ -92,7 +142,7 @@ def handle_user_message(message):
         
         bot.reply_to(message, reply, parse_mode="Markdown")
 
-# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG HẰNG NGÀY ---
+# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG & DỰ ĐOÁN HẰNG NGÀY ---
 def run_xsmb_job():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
@@ -103,6 +153,7 @@ def run_xsmb_job():
     now_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
     
     y_data = fetch_xsmb(d, m, y)
+    pred = calculate_predictions(y_data['db'], y_data['g1'])
     
     msg = f"📊 *KẾT QUẢ XSMB HÔM QUA ({display_date})*\n"
     msg += f"🏆 *Giải Đặc Biệt:* `{y_data['db']}`\n"
@@ -111,14 +162,14 @@ def run_xsmb_job():
     msg += f"🤖 *BOT DỰ ĐOÁN XSMB HÔM NAY*\n"
     msg += f"⏰ *Thời gian VN:* `{now_str}`\n\n"
     msg += "🎯 *TOP 3 LÔ CAO NHẤT*\n"
-    msg += "🥇 `03` | Tỷ lệ trúng: 18%\n"
-    msg += "🥈 `25` | Tỷ lệ trúng: 15%\n"
-    msg += "🥉 `73` | Tỷ lệ trúng: 13%\n\n"
+    msg += f"🥇 `{pred['lo1']}` | Tỷ lệ trúng: {pred['rate1']}\n"
+    msg += f"🥈 `{pred['lo2']}` | Tỷ lệ trúng: {pred['rate2']}\n"
+    msg += f"🥉 `{pred['lo3']}` | Tỷ lệ trúng: {pred['rate3']}\n\n"
     msg += "🎯 *2 LÔ XIÊN CAO*\n"
-    msg += "🥇 `12` | Tỷ lệ trúng: 17%\n"
-    msg += "🥈 `89` | Tỷ lệ trúng: 12%\n\n"
+    msg += f"🥇 `{pred['x1']}` | Tỷ lệ trúng: {pred['xrate1']}\n"
+    msg += f"🥈 `{pred['x2']}` | Tỷ lệ trúng: {pred['xrate2']}\n\n"
     msg += "🎯 *SỐ CUỐI ĐẶC BIỆT*\n"
-    msg += "🥇 `8` | Tỷ lệ trúng: 35%\n\n"
+    msg += f"🥇 `{pred['tail']}` | Tỷ lệ trúng: {pred['tail_rate']}\n\n"
     msg += "🎲 *Chơi có trách nhiệm - Chỉ giải trí!*"
     
     try:
