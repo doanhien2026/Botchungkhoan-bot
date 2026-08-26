@@ -1,144 +1,203 @@
-# =========================================================
-# BOT CHỨNG KHOÁN - VERSION 2.5.0 (FIX BYPASS WAF & BLOCK IP)
-# =========================================================
+# ==========================================
+# BOT CHỨNG KHOÁN - ĐÃ SỬA NGUỒN DỮ LIỆU V3
+# ==========================================
 import os
 import sys
 import time
-import requests
 import threading
+import requests
+from datetime import datetime
 from flask import Flask
-from datetime import datetime, timezone, timedelta
 
+# ========== CẤU HÌNH ==========
+TELEGRAM_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
+CHAT_ID = "1030583610"
+WATCH_LIST = ["ACV", "FPT", "VCB"]
+CHECK_INTERVAL = 300  # 5 phút
+last_signals = {}
+
+# ========== FLASK WEB SERVER ==========
 app = Flask(__name__)
 
 @app.route('/')
-def home():
-    return "Bot Chứng Khoán Ver 2.5.0 - Active 24/7", 200
+def health_check():
+    return "✅ Bot Chứng Khoán đang hoạt động", 200
 
-# --- THÔNG SỐ CẤU HÌNH ---
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1030583610")
-WATCH_LIST = ["ACV", "FPT", "VCB"]
-
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
+def run_flask():
     try:
-        res = requests.post(url, json=payload, timeout=12)
-        return res.status_code == 200
+        port = int(os.environ.get("PORT", 10000))
+        print(f"🌐 Đang khởi động Flask trên cổng {port}...")
+        app.run(host="0.0.0.0", port=port, use_reloader=False)
     except Exception as e:
-        print(f"❌ Lỗi gửi Telegram: {e}")
-        return False
+        print(f"❌ Lỗi Flask: {e}")
+        sys.exit(1)
 
-def parse_price(val):
-    if val is None or val == "":
-        return 0.0
+# ========== HÀM GỬI TELEGRAM ==========
+def send_telegram(message, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            data = {
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True
+            }
+            response = requests.post(url, json=data, timeout=30)
+            if response.status_code == 200:
+                print(f"✅ [BOT CK] Đã gửi tin thành công")
+                return response.json()
+            else:
+                print(f"⚠️ Lỗi {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"❌ Lỗi kết nối (lần {attempt+1}): {e}")
+            time.sleep(3)
+    return None
+
+# ========== LẤY GIÁ - NGUỒN MỚI ĐƯỢC KIỂM TRA ==========
+def get_stock_price(symbol):
+    # Nguồn 1: VNDIRECT API mới
     try:
-        val = float(str(val).replace(',', ''))
-        return val / 1000.0 if val >= 500 else val
-    except ValueError:
-        return 0.0
+        url = f"https://apipub.vndirect.com.vn/market-data/v1/securities/{symbol}/quote"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://vndirect.com.vn"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 0 and "data" in data:
+                item = data["data"]
+                price = float(item.get("lastPrice", 0))
+                if price > 0:
+                    print(f"✅ [{symbol}] Lấy dữ liệu thành công từ VNDIRECT")
+                    return {
+                        "symbol": symbol,
+                        "price": price,
+                        "change": float(item.get("change", 0)),
+                        "change_percent": float(item.get("changePercent", 0))
+                    }
+    except Exception as e:
+        print(f"⚠️ [{symbol}] VNDIRECT lỗi: {e}")
 
-# --- THU THẬP DỮ LIỆU ĐA NGUỒN CHỐNG CHẶN IP (VER 2.5.0) ---
-def fetch_stock_data(symbol):
-    headers_mobile = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-        "Referer": "https://m.cafef.vn/"
-    }
-
-    # Nguồn 1: CafeF Realtime Mobile API (Bypass IP ngoại cực tốt)
+    # Nguồn 2: SSI API
     try:
-        url = f"https://m.cafef.vn/ajax/GetPriceHistory.ashx?symbol={symbol}"
-        res = requests.get(url, headers=headers_mobile, timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            if data and "Data" in data and len(data["Data"]) > 0:
-                item = data["Data"][0]
-                price = parse_price(item.get("GiaDongCua") or item.get("GiaKhopLenh"))
-                ref = parse_price(item.get("GiaThamChieu"))
-                if price > 0 and ref > 0:
-                    return price, ref, "CafeF"
-    except Exception:
-        pass
+        url = f"https://iboard.ssi.com.vn/dchart/api/quote?symbol={symbol}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success") and "data" in data and len(data["data"]) > 0:
+                item = data["data"][0]
+                price = float(item.get("lastPrice", 0))
+                if price > 0:
+                    print(f"✅ [{symbol}] Lấy dữ liệu thành công từ SSI")
+                    return {
+                        "symbol": symbol,
+                        "price": price,
+                        "change": float(item.get("change", 0)),
+                        "change_percent": float(item.get("changePercent", 0))
+                    }
+    except Exception as e:
+        print(f"⚠️ [{symbol}] SSI lỗi: {e}")
 
-    # Nguồn 2: Vietstock Public Mobile API
+    # Nguồn 3: HOSE API
     try:
-        url = f"https://finance.vietstock.vn/data/getstockinfo?code={symbol}"
-        headers_vs = {"User-Agent": "Mozilla/5.0", "X-Requested-With": "XMLHttpRequest"}
-        res = requests.get(url, headers=headers_vs, timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            price = parse_price(data.get("LastPrice") or data.get("ClosePrice"))
-            ref = parse_price(data.get("ReferencePrice"))
-            if price > 0 and ref > 0:
-                return price, ref, "Vietstock"
-    except Exception:
-        pass
+        url = f"https://www.hsx.vn/Modules/Listed/Web/StockView/{symbol}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200 and "lastPrice" in response.text:
+            import re
+            price_match = re.search(r'"lastPrice":([\d.]+)', response.text)
+            change_match = re.search(r'"change":([\d.-]+)', response.text)
+            pct_match = re.search(r'"changePercent":([\d.-]+)', response.text)
+            if price_match:
+                price = float(price_match.group(1))
+                change = float(change_match.group(1)) if change_match else 0
+                pct = float(pct_match.group(1)) if pct_match else 0
+                if price > 0:
+                    print(f"✅ [{symbol}] Lấy dữ liệu thành công từ HOSE")
+                    return {
+                        "symbol": symbol,
+                        "price": price,
+                        "change": change,
+                        "change_percent": pct
+                    }
+    except Exception as e:
+        print(f"⚠️ [{symbol}] HOSE lỗi: {e}")
 
-    # Nguồn 3: SSI iBoard History API
-    try:
-        now_ts = int(time.time())
-        url = f"https://iboard.ssi.com.vn/dchart/api/history?resolution=1&symbol={symbol}&from={now_ts-86400}&to={now_ts}"
-        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get("s") == "ok" and len(data.get("c", [])) > 0:
-                price = parse_price(data["c"][-1])
-                ref = parse_price(data["o"][0])
-                if price > 0 and ref > 0:
-                    return price, ref, "SSI-History"
-    except Exception:
-        pass
+    print(f"❌ [{symbol}] Tất cả nguồn đều không lấy được dữ liệu")
+    return None
 
-    return None, None, None
+def analyze_stock(stock_data):
+    if not stock_data or stock_data["price"] == 0:
+        return "N/A"
+    change = stock_data["change"]
+    if change > 0:
+        return "MUA"
+    elif change < 0:
+        return "BÁN"
+    return "NẮM GIỮ"
 
-def run_stock_bot():
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# ========== GỬI BÁO CÁO ==========
+def generate_report():
+    global last_signals
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    message = f"📊 *BÁO CÁO CHỨNG KHOÁN* — {now}\n\n"
+    has_change = False
+    success_count = 0
 
-    vn_tz = timezone(timedelta(hours=7))
-    now_vn = datetime.now(vn_tz)
-    now_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
-    
-    msg = f"📊 *BÁO CÁO CHỨNG KHOÁN (VER 2.5.0)*\n"
-    msg += f"⏰ *Thời gian VN:* `{now_str}`\n"
-    msg += "-----------------------------------\n\n"
-    
-    valid_count = 0
-    
     for symbol in WATCH_LIST:
-        price, ref, source = fetch_stock_data(symbol)
-        
-        if not price:
-            msg += f"⚠️ *{symbol}*: Không lấy được dữ liệu\n"
+        data = get_stock_price(symbol)
+        if not data:
+            message += f"⚠️ *{symbol}*: Không lấy được dữ liệu\n\n"
             continue
-            
-        valid_count += 1
-        pct = ((price - ref) / ref * 100) if ref > 0 else 0
-        icon = "🟢" if pct > 0 else ("🔴" if pct < 0 else "🟡")
         
-        msg += f"📌 *Mã: {symbol}* {icon} _({source})_\n"
-        msg += f"💵 Giá: *{price:,.2f}* (TC: {ref:,.2f})\n"
-        msg += f"📊 Biến động: *{pct:+.2f}%*\n"
-        msg += "-----------------------------------\n"
+        success_count += 1
+        signal = analyze_stock(data)
+        current_key = f"{symbol}-{data['price']}-{signal}"
+        
+        if last_signals.get(symbol) != current_key:
+            last_signals[symbol] = current_key
+            has_change = True
+        
+        message += f"""📌 *{symbol}*
+💰 Giá: *{data['price']:,.2f}*
+📈 Thay đổi: *{data['change']:+.2f}* ({data['change_percent']:+.2f}%)
+📋 Khuyến nghị: *{signal}*
 
-        time.sleep(1)
+"""
 
-    send_telegram(msg)
+    if success_count > 0:
+        if has_change or not last_signals:
+            send_telegram(message)
+            print(f"✅ Đã gửi báo cáo — {now} | Thành công: {success_count}/{len(WATCH_LIST)}")
+    else:
+        print(f"⚠️ Không lấy được dữ liệu nào — {now}")
 
-def start_bot_thread():
+# ========== CHƯƠNG TRÌNH CHÍNH ==========
+def main():
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("❌ Thiếu TOKEN hoặc CHAT_ID")
+        return
+    
+    # Khởi động Flask TRƯỚC
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
     time.sleep(3)
-    run_stock_bot()
+    print("✅ Flask đã chạy, bắt đầu bot...")
+    
+    # Chạy lần đầu
+    generate_report()
+    
+    # Lặp vô hạn
+    while True:
+        time.sleep(CHECK_INTERVAL)
+        generate_report()
 
 if __name__ == "__main__":
-    t = threading.Thread(target=start_bot_thread)
-    t.daemon = True
-    t.start()
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    main()
