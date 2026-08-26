@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 9.0.0 (ĐÃ TÍCH HỢP GOOGLE PROXY CHUẨN)
+# BOT XSMB - VERSION 9.2.0 (FIX TRIỆT ĐỂ LỖI FETCH DATA)
 # =========================================================
 import os
 import re
@@ -16,24 +16,27 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
 
-# LINK GOOGLE APPS SCRIPT CỦA BẠN ĐÃ ĐƯỢC TÍCH HỢP TẬN GỐC:
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfyeby4DsBh6MLUH-XYdgk6znzDyeNsehSI6CqGiHFgU-XJ4k_WBD0sXasDx55bfW4F-ktGOQ/exec"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 9.0.0 - Active 24/7", 200
+    return "XSMB Bot Ver 9.2.0 - Active 24/7", 200
 
 # --- HÀM LẤY KẾT QUẢ QUA GOOGLE PROXY ---
 def fetch_xsmb(d, m, y):
     date_formatted = f"{d}-{m}-{y}"
     try:
-        url = f"{GOOGLE_SCRIPT_URL}?date={date_formatted}"
-        res = requests.get(url, timeout=10)
+        # Gửi chuẩn tham số date=DD-MM-YYYY
+        params = {"date": date_formatted}
+        res = requests.get(GOOGLE_SCRIPT_URL, params=params, timeout=15, allow_redirects=True)
+        
         if res.status_code == 200:
             data = res.json()
-            return {"db": data.get("db", "Chưa có"), "g1": data.get("g1", "Chưa có")}
+            db = data.get("db", "Chưa có")
+            g1 = data.get("g1", "Chưa có")
+            return {"db": db, "g1": g1}
     except Exception as e:
         print(f"Lỗi truy vấn Google Script: {e}")
 
@@ -48,7 +51,11 @@ def handle_user_message(message):
         y, m, d = match.group(1), match.group(2), match.group(3)
         display_date = f"{y}/{m}/{d}"
         
-        data = fetch_xsmb(d, m, y)
+        # Đảm bảo d, m đủ 2 chữ số dạng chuỗi
+        d_str = str(int(d)).zfill(2)
+        m_str = str(int(m)).zfill(2)
+        
+        data = fetch_xsmb(d_str, m_str, y)
         
         reply = f"📊 *KẾT QUẢ XSMB NGÀY {display_date}*\n"
         reply += f"🏆 *Giải Đặc Biệt:* `{data['db']}`\n"
