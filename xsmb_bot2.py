@@ -1,10 +1,11 @@
 # =========================================================
-# BOT XSMB - VERSION 7.0.0 (CHUẨN XÁC 100% KHÔNG BỊ CHẶN)
+# BOT XSMB - VERSION 8.0.0 (SỬ DỤNG API JSON TRỰC TIẾP)
 # =========================================================
 import os
 import re
 import time
-import requests
+import json
+import urllib.request
 import threading
 import telebot
 from flask import Flask
@@ -13,66 +14,57 @@ from datetime import datetime, timezone, timedelta
 app = Flask(__name__)
 
 # --- CẤU HÌNH BOT ---
-TELEGRAM_TOKEN = "8901722608:AAHnHnHyt28ilnHCHRaDUedA1ra1p0gPWda8"
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 7.0.0 - Active 24/7", 200
+    return "XSMB Bot Ver 8.0.0 - Active 24/7", 200
 
-# --- HÀM CÀO DỮ LIỆU XSMB ĐA NGUỒN CHỐNG CHẶN IP ---
+# --- HÀM LẤY KẾT QUẢ XSMB BẰNG API JSON CÔNG KHAI ---
 def fetch_xsmb(d, m, y):
+    # Định dạng ngày DD-MM-YYYY
+    date_str = f"{d}-{m}-{y}"
+    url = f"https://atpsoftware.vn/api/xoso.php?date={date_str}"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
     
-    # Nguồn 1: Xosodaiphat (Nguồn tĩnh cực kỳ ổn định)
     try:
-        url1 = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
-        res1 = requests.get(url1, headers=headers, timeout=6)
-        if res1.status_code == 200:
-            html = res1.text
-            # Tìm Giải Đặc Biệt 5 chữ số
-            gdb_match = re.search(r'id="mb_giai_dacbiet"[^>]*>.*?(\d{5}).*?</td>', html, re.DOTALL) or \
-                        re.search(r'class="v-gdb"[^>]*>.*?(\d{5}).*?</td>', html, re.DOTALL)
-            g1_match = re.search(r'id="mb_giai_nhat"[^>]*>.*?(\d{5}).*?</td>', html, re.DOTALL)
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as response:
+            res_data = response.read().decode('utf-8')
+            data = json.loads(res_data)
             
-            # Lấy tất cả số xuất hiện trong bảng kết quả
-            all_nums = re.findall(r'<td[^>]*class="[^\"]*v-g[^\"]*"[^>]*>.*?(\d+).*?</td>', html, re.DOTALL)
-            if not all_nums:
-                all_nums = re.findall(r'class="number"[^>]*>(\d+)</span>', html)
+            # Nếu có dữ liệu trả về từ API
+            if "dac_biet" in data and data["dac_biet"]:
+                db = str(data.get("dac_biet", "Chưa có"))
+                g1 = str(data.get("giai_nhat", "Chưa có"))
+                lo_raw = data.get("loto", [])
+                lo_list = [str(x)[-2:] for x in lo_raw] if lo_raw else []
+                return {"db": db, "g1": g1, "lo": lo_list}
+    except Exception as e:
+        print(f"Lỗi API 1: {e}")
 
-            if gdb_match:
-                db = gdb_match.group(1)
-                g1 = g1_match.group(1) if g1_match else "N/A"
-                lo_list = [n[-2:] for n in all_nums if n.isdigit()]
-                return {"db": db, "g1": g1, "lo": lo_list[:27]}
-    except Exception:
-        pass
-
-    # Nguồn 2 dự phòng: Xoso.com.vn
+    # Nguồn API 2 dự phòng (Dạng JSON tĩnh)
     try:
-        url2 = f"https://xoso.com.vn/xsmb-{d}-{m}-{y}.html"
-        res2 = requests.get(url2, headers=headers, timeout=6)
-        if res2.status_code == 200:
-            html = res2.text
-            db_match = re.search(r'class="v-gdb"[^>]*>(\d{5})</td>', html)
-            g1_match = re.search(r'class="v-g1"[^>]*>(\d{5})</td>', html)
-            all_lotto = re.findall(r'class="v-g[db0-7]+"[^>]*>(\d+)</td>', html)
-            
+        url2 = f"https://xskt.com.vn/rss-feed/mien-bac-xsmb.rss"
+        req2 = urllib.request.Request(url2, headers=headers)
+        with urllib.request.urlopen(req2, timeout=8) as response:
+            xml_text = response.read().decode('utf-8')
+            # Tìm ĐB bằng Regex trong RSS
+            db_match = re.search(r'ĐB:\s*(\d{5})', xml_text)
             if db_match:
-                db = db_match.group(1)
-                g1 = g1_match.group(1) if g1_match else "N/A"
-                lo_list = [n[-2:] for n in all_lotto]
-                return {"db": db, "g1": g1, "lo": lo_list[:27]}
-    except Exception:
-        pass
+                return {"db": db_match.group(1), "g1": "Có trong RSS", "lo": []}
+    except Exception as e:
+        print(f"Lỗi API 2: {e}")
 
     return {"db": "Chưa có", "g1": "Chưa có", "lo": []}
 
-# --- 1. XỬ LÝ LỆNH NGƯỜI DÙNG GÕ NĂM/THÁNG/NGÀY (YYYY/MM/DD) ---
+# --- 1. XỬ LÝ KHI NGƯỜI DÙNG GÕ NGÀY (YYYY/MM/DD) ---
 @bot.message_handler(func=lambda msg: True)
 def handle_user_message(message):
     text = message.text.strip()
@@ -93,7 +85,7 @@ def handle_user_message(message):
             
         bot.reply_to(message, reply, parse_mode="Markdown")
 
-# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG HẰNG NGÀY ---
+# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG ---
 def run_xsmb_job():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
@@ -127,7 +119,7 @@ def run_xsmb_job():
     except Exception as e:
         print(f"Lỗi gửi tin nhắn: {e}")
 
-# --- 3. BỘ KHỞI CHẠY CHỐNG XUNG ĐỘT ---
+# --- 3. KHỜI CHẠY POLLING ---
 def start_polling():
     time.sleep(3)
     try:
