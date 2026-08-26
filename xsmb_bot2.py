@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 15.4.0 (LỆNH TRA CỨU NGÀY + GỬI 18H35)
+# BOT XSMB - VERSION 15.5.0 (ĐA NGUỒN DỮ LIỆU + TRA CỨU NGÀY)
 # =========================================================
 import os
 import re
@@ -20,7 +20,7 @@ CHAT_ID = "-1001030583610"
 PROXY_CONFIG = {}
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# --- LẤY KẾT QUẢ XSMB ---
+# --- LẤY KẾT QUẢ XSMB — 4 NGUỒN DỮ LIỆU ĐỂ ĐẢM BẢO ---
 def fetch_xsmb(d, m, y):
     d_str = d.zfill(2)
     m_str = m.zfill(2)
@@ -28,58 +28,84 @@ def fetch_xsmb(d, m, y):
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "Accept": "text/html,application/json,*/*"
     }
     
     kwargs = {"headers": headers, "timeout": 15}
     if PROXY_CONFIG:
         kwargs["proxies"] = PROXY_CONFIG
 
-    # NGUỒN 1: API VOH
-    url_voh = f"https://voh.com.vn/api/v1/lottery/xsmb?date={y_str}-{m_str}-{d_str}"
+    # === NGUỒN 1: KQXS.VN ===
     try:
-        res = requests.get(url_voh, **kwargs)
-        if res.status_code == 200:
-            data = res.json()
-            db = g1 = None
-            if "data" in data and isinstance(data["data"], dict):
-                ld = data["data"]
-                db = ld.get("special") or ld.get("dac_biet") or ld.get("giai_dac_biet")
-                g1 = ld.get("first") or ld.get("giai_nhat") or ld.get("giai1")
-            elif "result" in data and isinstance(data["result"], dict):
-                ld = data["result"]
-                db = ld.get("special") or ld.get("dac_biet")
-                g1 = ld.get("first") or ld.get("giai_nhat")
-            
-            if isinstance(db, list) and len(db) > 0: db = db[0]
-            if isinstance(g1, list) and len(g1) > 0: g1 = g1[0]
-            
-            if db:
-                db = re.sub(r'\D', '', str(db))
-                if len(db) >= 5:
-                    g1 = re.sub(r'\D', '', str(g1)) if g1 else "Chưa có"
-                    print(f"✅ VOH: GĐB={db}, G1={g1}")
-                    return {"db": db, "g1": g1 if g1 and len(g1)>=5 else "Chưa có"}
-    except Exception as e:
-        print(f"⚠️ Lỗi VOH: {e}")
-
-    # NGUỒN 2: XOSO.COM.VN
-    try:
-        url_xoso = f"https://xoso.com.vn/xsmb-{d_str}-{m_str}-{y_str}.html"
-        res = requests.get(url_xoso, **kwargs)
+        url = f"https://kqxs.vn/xsmb/{y_str}-{m_str}-{d_str}"
+        res = requests.get(url, **kwargs)
         if res.status_code == 200:
             html = res.text
-            db_m = re.search(r'(?:id|class)=["\'].*dac_biet.*?["\'][^>]*>(?:\s*<[^>]+>)*(\d{5,6})', html, re.I)
-            g1_m = re.search(r'(?:id|class)=["\'].*giai_nhat.*?["\'][^>]*>(?:\s*<[^>]+>)*(\d{5})', html, re.I)
+            db_m = re.search(r'(?:Đặc biệt|Dac Biet)[\s\S]*?<b[^>]*>(\d{5,6})<\/b>', html, re.I)
+            if not db_m:
+                db_m = re.search(r'class="[^"]*dac_biet[^"]*"[^>]*>(\d{5,6})<', html, re.I)
+            g1_m = re.search(r'(?:Giải nhất|Giai 1)[\s\S]*?<b[^>]*>(\d{5})<\/b>', html, re.I)
+            if not g1_m:
+                g1_m = re.search(r'class="[^"]*giai_nhat[^"]*"[^>]*>(\d{5})<', html, re.I)
+            
             db = db_m.group(1) if db_m else None
             g1 = g1_m.group(1) if g1_m else None
-            if db:
-                print(f"✅ Xoso.com.vn: GĐB={db}, G1={g1 or 'Chưa có'}")
-                return {"db": db, "g1": g1 if g1 else "Chưa có"}
+            if db and db.isdigit() and len(db) >= 5:
+                print(f"✅ Nguồn KQXS.vn: GĐB={db}, G1={g1 or 'Chưa có'}")
+                return {"db": db, "g1": g1 if g1 and len(g1)>=5 else "Chưa có"}
     except Exception as e:
-        print(f"⚠️ Lỗi Xoso: {e}")
+        print(f"⚠️ KQXS.vn lỗi: {e}")
 
-    print(f"❌ Không lấy được dữ liệu {d_str}/{m_str}/{y_str}")
+    # === NGUỒN 2: XOSO.WAP.VN ===
+    try:
+        url = f"https://xoso.wap.vn/xsmb/{y_str}/{m_str}/{d_str}"
+        res = requests.get(url, **kwargs)
+        if res.status_code == 200:
+            html = res.text
+            db_m = re.search(r'Đặc biệt.*?(\d{5,6})', html, re.I)
+            g1_m = re.search(r'Giải nhất.*?(\d{5})', html, re.I)
+            db = db_m.group(1) if db_m else None
+            g1 = g1_m.group(1) if g1_m else None
+            if db and db.isdigit() and len(db) >= 5:
+                print(f"✅ Nguồn Xoso.wap.vn: GĐB={db}, G1={g1 or 'Chưa có'}")
+                return {"db": db, "g1": g1 if g1 and len(g1)>=5 else "Chưa có"}
+    except Exception as e:
+        print(f"⚠️ Xoso.wap.vn lỗi: {e}")
+
+    # === NGUỒN 3: KETQUAXOSO.NET ===
+    try:
+        url = f"https://ketquaxoso.net/xsmb-{d_str}-{m_str}-{y_str}/"
+        res = requests.get(url, **kwargs)
+        if res.status_code == 200:
+            html = res.text
+            db_m = re.search(r'(?:id|class)=["\'].*dacbiet.*?["\'][^>]*>(\d{5,6})<', html, re.I)
+            g1_m = re.search(r'(?:id|class)=["\'].*giai1.*?["\'][^>]*>(\d{5})<', html, re.I)
+            db = db_m.group(1) if db_m else None
+            g1 = g1_m.group(1) if g1_m else None
+            if db and db.isdigit() and len(db) >= 5:
+                print(f"✅ Nguồn Ketquaxoso.net: GĐB={db}, G1={g1 or 'Chưa có'}")
+                return {"db": db, "g1": g1 if g1 and len(g1)>=5 else "Chưa có"}
+    except Exception as e:
+        print(f"⚠️ Ketquaxoso.net lỗi: {e}")
+
+    # === NGUỒN 4: XOSO.ME ===
+    try:
+        url = f"https://xoso.me/xsmb/{d_str}/{m_str}/{y_str}"
+        res = requests.get(url, **kwargs)
+        if res.status_code == 200:
+            html = res.text
+            db_m = re.search(r'Đặc biệt.*?<span[^>]*>(\d{5,6})<\/span>', html, re.I)
+            g1_m = re.search(r'Giải nhất.*?<span[^>]*>(\d{5})<\/span>', html, re.I)
+            db = db_m.group(1) if db_m else None
+            g1 = g1_m.group(1) if g1_m else None
+            if db and db.isdigit() and len(db) >= 5:
+                print(f"✅ Nguồn Xoso.me: GĐB={db}, G1={g1 or 'Chưa có'}")
+                return {"db": db, "g1": g1 if g1 and len(g1)>=5 else "Chưa có"}
+    except Exception as e:
+        print(f"⚠️ Xoso.me lỗi: {e}")
+
+    # === TẤ CẢ NGUỒN ĐỀU LỖI ===
+    print(f"❌ Tất cả nguồn dữ liệu không truy cập được cho {d_str}/{m_str}/{y_str}")
     return {"db": "Chưa có", "g1": "Chưa có"}
 
 # --- LOGIC DỰ ĐOÁN ---
@@ -90,6 +116,7 @@ def calculate_predictions(db_num, g1_num):
         lo1, lo2, lo3 = f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}"
         xien1, xien2 = f"{random.randint(0, 99):02d}", f"{random.randint(0, 99):02d}"
         tou_db = f"{random.randint(0, 9)}"
+        print(f"🧠 Dự đoán theo ngày (chưa có dữ liệu): Lô: {lo1},{lo2},{lo3} | Xiên: {xien1},{xien2} | Đuôi: {tou_db}")
     else:
         db_int = int(db_num)
         g1_int = int(g1_num) if g1_num.isdigit() else 0
@@ -100,6 +127,7 @@ def calculate_predictions(db_num, g1_num):
         xien1 = f"{(db_int + 12) % 100:02d}"
         xien2 = f"{(g1_int + 35) % 100:02d}"
         tou_db = str(sum_db % 10)
+        print(f"🧠 Tính từ GĐB={db_num}: Lô: {lo1},{lo2},{lo3} | Xiên: {xien1},{xien2} | Đuôi: {tou_db}")
 
     return {
         "lo1": lo1, "rate1": "~20%",
@@ -117,7 +145,6 @@ def calculate_predictions(db_num, g1_num):
 def handle_user_message(message):
     text = message.text.strip()
     
-    # Bỏ qua lệnh rỗng
     if not text:
         return
     
@@ -137,8 +164,7 @@ def handle_user_message(message):
         bot.reply_to(message, help_msg, parse_mode="Markdown")
         return
     
-    # Tìm ngày trong tin nhắn — hỗ trợ nhiều định dạng
-    # Định dạng: YYYY-MM-DD | DD/MM/YYYY | DD-MM-YYYY | YYYYMMDD
+    # Tìm ngày trong tin nhắn
     date_patterns = [
         r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})',  # 2026-08-25
         r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})',  # 25/08/2026
@@ -159,29 +185,21 @@ def handle_user_message(message):
             break
     
     if not match:
-        # Không phải ngày → không trả lời (tránh lặp)
         return
     
-    # Chuẩn hóa ngày
     d = d.zfill(2)
     m = m.zfill(2)
     display_date = f"{d}/{m}/{y}"
     
-    # Thông báo đang lấy dữ liệu
     bot.reply_to(message, f"🔄 Đang lấy kết quả XSMB ngày {display_date}...")
     
-    # Lấy kết quả từ API
     data = fetch_xsmb(d, m, y)
-    
-    # Tính dự đoán cho ngày đó
     pred = calculate_predictions(data['db'], data['g1'])
     
-    # Tạo tin nhắn trả về
     reply = f"📊 *KẾT QUẢ XSMB NGÀY {display_date}*\n"
     reply += f"🏆 *Giải Đặc Biệt:* `{data['db']}`\n"
     reply += f"🥇 *Giải Nhất:* `{data['g1']}`\n"
     
-    # Nếu có kết quả thật → hiện dự đoán
     if data['db'] != "Chưa có" and data['db'].isdigit():
         reply += "-----------------------------------\n"
         reply += "🤖 *DỰ ĐOÁN DỰA TRÊN KẾT QUẢ NGÀY TRƯỚC*\n\n"
@@ -194,6 +212,8 @@ def handle_user_message(message):
         reply += f"🥈 `{pred['x2']}` | Tỷ lệ: {pred['xrate2']}\n\n"
         reply += "🎯 *SỐ CUỐI ĐẶC BIỆT*\n"
         reply += f"🥇 `{pred['tail']}` | Tỷ lệ: {pred['tail_rate']}\n\n"
+    else:
+        reply += "\n⚠️ *Dữ liệu chưa cập nhật — Dự đoán dựa trên thuật toán ngày*\n"
     
     reply += "🎲 *Chơi có trách nhiệm - Chỉ giải trí!*"
     
@@ -211,7 +231,6 @@ def run_xsmb_job():
             today_str = now_vn.strftime("%d/%m/%Y")
             hour, minute = now_vn.hour, now_vn.minute
             
-            # Chỉ gửi lúc 18:35 và chưa gửi hôm nay
             if hour == 18 and minute >= 35 and last_send_date != today_str:
                 print(f"⏰ Gửi tự động 18:35: {today_str}")
                 
@@ -266,7 +285,7 @@ def start_polling():
             time.sleep(10)
 
 if __name__ == "__main__":
-    print("🚀 BOT XSMB KHỞI ĐỘNG — SẴN SÀNG TRA CỨU NGÀY!")
+    print("🚀 BOT XSMB KHỞI ĐỘNG — 4 NGUỒN DỮ LIỆU ĐỂ ĐẢM BẢO!")
     print("💡 Gõ: help → Hướng dẫn | Gõ ngày → Kết quả + Dự đoán")
     
     threading.Thread(target=run_xsmb_job, daemon=True).start()
