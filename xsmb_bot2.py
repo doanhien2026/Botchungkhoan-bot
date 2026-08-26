@@ -1,6 +1,6 @@
 # ============================================================
-# BOT XSMB — HOÀN CHỈNH V5.0
-# ✅ Tự lưu dữ liệu | ✅ Gửi ngay khi chạy | ✅ Dễ sửa nhất
+# BOT XSMB — V5.1 (ĐÃ SỬA TOKEN + CHAT_ID + LỖI NGÀY + TỐI ƯU)
+# ✅ Lưu dữ liệu tự động | ✅ Phân tích lịch sử thực tế | ✅ Gửi 18:35
 # ============================================================
 import os
 import json
@@ -8,16 +8,16 @@ import time
 import requests
 import re
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from collections import Counter
 from flask import Flask
 
 # ====================== 🔧 CHỈ SỬA Ở ĐÂY ======================
-TELEGRAM_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
-CHAT_ID = "1030583610"
-DATA_FILE = "xsmb_data.json"   # File tự tạo, không cần tạo thủ công
-CHECK_INTERVAL = 3600           # Kiểm tra mỗi 1 giờ (giây)
-SEND_TIME = "18:35"             # Gửi kết quả hàng ngày
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+CHAT_ID = "-1001030583610"       # ✅ Đã sửa đúng ID kênh của bạn
+DATA_FILE = "xsmb_data.json"
+CHECK_INTERVAL = 300              # Kiểm tra mỗi 5 phút (nhanh hơn)
+SEND_TIME = "18:35"               # Gửi kết quả hàng ngày
 # ===============================================================
 
 app = Flask(__name__)
@@ -25,7 +25,7 @@ app = Flask(__name__)
 # ========== WEB SERVER ==========
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V5.0 — Đang hoạt động & Lưu dữ liệu tự động", 200
+    return "✅ Bot XSMB V5.1 — Phân tích lịch sử thực tế", 200
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
@@ -33,22 +33,15 @@ def run_server():
 
 # ========== QUẢN LÝ LƯU TRỮ DỮ LIỆU ==========
 def load_data():
-    """Đọc dữ liệu — có thì đọc, không thì tạo mới"""
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except:
             pass
-    # Tạo mới nếu file lỗi / chưa có
-    return {
-        "history": [],
-        "last_date": "",
-        "updated_at": ""
-    }
+    return {"history": [], "last_date": "", "updated_at": ""}
 
 def save_data(data):
-    """Lưu dữ liệu ra file"""
     try:
         data["updated_at"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -58,73 +51,119 @@ def save_data(data):
         print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ========== LẤY KẾT QUẢ XSMB ==========
+# ========== LẤY KẾT QUẢ XSMB — TỐI ƯU + ĐA NGUỒN ==========
 def get_xsmb_result():
-    """Lấy kết quả mới nhất từ KQXS.vn"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "vi-VN,vi;q=0.9"
+    }
+
+    # === NGUỒN 1: KQXS.VN ===
     try:
         url = "https://kqxs.vn/ket-qua-xo-so-mien-bac-truyen-thong"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code != 200:
-            return None
-
-        # Ngày
-        date_match = re.search(r'Kết quả XSMB ngày (\d{2}/\d{2}/\d{4})', r.text)
-        date_str = date_match.group(1) if date_match else datetime.now().strftime("%d/%m/%Y")
-
-        # Giải đặc biệt
-        special_match = re.search(r'Giải Đặc biệt.*?(\d{6})', r.text, re.DOTALL)
-        special = special_match.group(1) if special_match else "------"
-
-        # Tất cả số lô 2 chữ số
-        lotos = re.findall(r'<td class="lottery-result-item">(\d{2})</td>', r.text)
-        if not lotos:
-            lotos = re.findall(r'\b(\d{2})\b', r.text)
-            lotos = [n for n in lotos if n != '00' and len(n) == 2][:27]
-
-        return {
-            "date": date_str,
-            "special": special,
-            "loto": lotos,
-            "time": datetime.now().strftime("%H:%M:%S")
-        }
+        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code == 200 and len(r.text) > 500:
+            # Ngày
+            date_match = re.search(r'Kết quả XSMB ngày (\d{2}/\d{2}/\d{4})', r.text)
+            date_str = date_match.group(1) if date_match else datetime.now().strftime("%d/%m/%Y")
+            
+            # Giải Đặc Biệt
+            special_match = re.search(r'(?:Giải Đặc biệt|Đặc biệt)[\s\S]{0,100}?(\d{5,6})', r.text, re.I)
+            special = special_match.group(1) if special_match else "------"
+            
+            # Tất cả số lô 2 chữ số
+            lotos = re.findall(r'lottery-result-item[^>]*>(\d{2})<', r.text)
+            if not lotos:
+                lotos = re.findall(r'>(\d{2})<', r.text)
+                lotos = [n for n in lotos if n.isdigit() and n != '00' and len(n) == 2][:27]
+            
+            if special != "------" and len(lotos) >= 20:
+                print(f"✅ [KQXS.vn] {date_str} | GĐB: {special} | Lô: {len(lotos)} số")
+                return {
+                    "date": date_str,
+                    "special": special,
+                    "loto": lotos,
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "source": "KQXS.vn"
+                }
     except Exception as e:
-        print(f"❌ Lỗi lấy dữ liệu: {e}")
-        return None
+        print(f"⚠️ [KQXS.vn] Lỗi: {str(e)[:40]}")
 
-# ========== PHÂN TÍCH & DỰ BÁO ==========
+    # === NGUỒN 2: XOSO.WAP.VN ===
+    try:
+        url = "https://xoso.wap.vn/xsmb"
+        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code == 200 and len(r.text) > 300:
+            date_match = re.search(r'Ngày (\d{2}/\d{2}/\d{4})', r.text)
+            date_str = date_match.group(1) if date_match else datetime.now().strftime("%d/%m/%Y")
+            special_match = re.search(r'Đặc biệt.*?(\d{5,6})', r.text, re.I)
+            special = special_match.group(1) if special_match else "------"
+            lotos = re.findall(r'>(\d{2})<', r.text)
+            lotos = [n for n in lotos if n.isdigit() and n != '00' and len(n) == 2][:27]
+            if special != "------" and len(lotos) >= 20:
+                print(f"✅ [Xoso.wap.vn] {date_str} | GĐB: {special}")
+                return {
+                    "date": date_str, "special": special, "loto": lotos,
+                    "time": datetime.now().strftime("%H:%M:%S"), "source": "Xoso.wap.vn"
+                }
+    except Exception as e:
+        print(f"⚠️ [Xoso.wap.vn] Lỗi: {str(e)[:40]}")
+
+    print("❌ Không lấy được dữ liệu")
+    return None
+
+# ========== PHÂN TÍCH & DỰ BÁO TỪ LỊCH SỬ ==========
 def analyze(history):
-    """Phân tích lịch sử → tạo tín hiệu"""
-    if len(history) < 10:
+    """Phân tích tần suất 90 ngày gần nhất → tín hiệu chính xác hơn"""
+    if len(history) < 5:
+        print(f"⚠️ Chưa đủ dữ liệu: {len(history)} ngày (cần ít nhất 5)")
         return None
 
     all_loto = []
     for day in history:
         all_loto.extend(day.get("loto", []))
 
-    if not all_loto:
+    if not all_loto or len(all_loto) < 20:
         return None
 
-    # Top 3 lô nhiều nhất
+    tong_ngay = len(history)
+    tong_so = len(all_loto)
+
+    # Top 3 lô ra nhiều nhất
     freq = Counter(all_loto)
     top3 = freq.most_common(3)
 
-    # Đầu lô nhiều nhất
-    dau = Counter([n[0] for n in all_loto]).most_common(1)[0]
+    # Đầu lô ra nhiều nhất
+    dau_count = Counter([n[0] for n in all_loto])
+    dau = dau_count.most_common(1)[0]
 
-    # Đuôi lô nhiều nhất
-    duoi = Counter([n[1] for n in all_loto]).most_common(1)[0]
+    # Đuôi lô ra nhiều nhất
+    duoi_count = Counter([n[1] for n in all_loto])
+    duoi = duoi_count.most_common(1)[0]
 
+    # 2 lô xiên từ top tiếp theo
+    top5 = freq.most_common(5)
+    xien = top3[1:] + [top5[3]] if len(top5) >= 4 else top3[1:]
+
+    # Tỷ lệ = (số lần xuất hiện / tổng số ngày) * 100
     return {
-        "top3": [{"num": n[0], "rate": f"~{round(n[1]/len(history)*100)}%"} for n in top3],
-        "dau": {"num": dau[0], "rate": f"~{round(dau[1]/len(history)*100)}%"},
-        "duoi": {"num": duoi[0], "rate": f"~{round(duoi[1]/len(history)*100)}%"},
-        "nguoi_duoi": history[-1].get("special", "")[-1] if history[-1].get("special") else "?"
+        "top3": [
+            {"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%", "count": n[1]} 
+            for n in top3
+        ],
+        "xien": [
+            {"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%"} 
+            for n in xien[:2]
+        ],
+        "dau": {"num": dau[0], "rate": f"~{round(dau[1]/tong_ngay*100)}%"},
+        "duoi": {"num": duoi[0], "rate": f"~{round(duoi[1]/tong_ngay*100)}%"},
+        "duoi_gdb": history[-1].get("special", "")[-1] if history[-1].get("special") and len(history[-1].get("special", ""))>=5 else "?",
+        "tong_ngay": tong_ngay,
+        "tong_so": tong_so
     }
 
 # ========== GỬI TELEGRAM ==========
 def send_tg(text):
-    """Gửi tin nhắn Telegram"""
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         r = requests.post(url, json={
@@ -135,31 +174,35 @@ def send_tg(text):
         }, timeout=30)
         return r.status_code == 200
     except Exception as e:
-        print(f"❌ Lỗi gửi Telegram: {e}")
+        print(f"❌ Lỗi gửi: {e}")
         return False
 
 # ========== TẠO BÁO CÁO ==========
 def build_report(result, pred):
-    """Tạo nội dung báo cáo đẹp"""
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     msg = f"""
 📊 *KẾT QUẢ XSMB — {result['date']}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 Giải Đặc biệt: *{result['special']}*
+📡 Nguồn: {result.get('source', 'Không xác định')}
 📅 Cập nhật: {now}
-💾 Dữ liệu đã lưu tự động
+💾 Dữ liệu: {pred['tong_ngay']} ngày gần nhất
 
-🤖 *DỰ ĐOÁN DỰA TRÊN LỊCH SỬ*
+🤖 *DỰ ĐOÁN DỰA TRÊN TẦN SUẤT THỰC TẾ*
 
-🎯 *TOP 3 LÔ NÓI TIẾP*
-1️⃣ {pred['top3'][0]['num']} — {pred['top3'][0]['rate']}
-2️⃣ {pred['top3'][1]['num']} — {pred['top3'][1]['rate']}
-3️⃣ {pred['top3'][2]['num']} — {pred['top3'][2]['rate']}
+🎯 *TOP 3 LÔ CAO NHẤT*
+🥇 {pred['top3'][0]['num']} — {pred['top3'][0]['rate']} ({pred['top3'][0]['count']} lần)
+🥈 {pred['top3'][1]['num']} — {pred['top3'][1]['rate']}
+🥉 {pred['top3'][2]['num']} — {pred['top3'][2]['rate']}
 
-🔢 *ĐẦU LÔ NÓI* → {pred['dau']['num']} — {pred['dau']['rate']}
-🔢 *ĐUÔI LÔ NÓI* → {pred['duoi']['num']} — {pred['duoi']['rate']}
+🎯 *2 LÔ XIÊN CAO*
+🥇 {pred['xien'][0]['num']} — {pred['xien'][0]['rate']}
+🥈 {pred['xien'][1]['num']} — {pred['xien'][1]['rate']}
 
-🎲 *SỐ CUỐI ĐẶC BIỆT VỪA RA*: {pred['nguoi_duoi']}
+🔢 *ĐẦU LÔ NỔI BẬT* → {pred['dau']['num']} — {pred['dau']['rate']}
+🔢 *ĐUÔI LÔ NỔI BẬT* → {pred['duoi']['num']} — {pred['duoi']['rate']}
+
+🎲 *SỐ CUỐI ĐẶC BIỆT VỪA RA*: {pred['duoi_gdb']}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*
@@ -168,67 +211,74 @@ def build_report(result, pred):
 
 # ========== CHƯƠNG TRÌNH CHÍNH ==========
 def main():
-    print("🚀 Bot XSMB V5.0 khởi động...")
-
-    # 1. Tải dữ liệu đã lưu
+    print("🚀 Bot XSMB V5.1 KHỞI ĐỘNG — Phân tích lịch sử thực tế!")
     data = load_data()
     print(f"📂 Đã có {len(data['history'])} ngày dữ liệu")
 
-    # 2. Khởi động web server
+    # Khởi động server
     threading.Thread(target=run_server, daemon=True).start()
     time.sleep(2)
     print("✅ Server đã chạy")
 
-    # 3. GỬI BÁO CÁO NGAY LẦN ĐẦU — để kiểm tra
-    print("📤 Đang lấy dữ liệu & gửi báo cáo...")
-    result = get_xsmb_result()
+    vn_tz = timezone(timedelta(hours=7))
+    last_send_date = None
 
+    # Gửi ngay lần đầu để test
+    print("📤 Lấy dữ liệu & gửi báo cáo lần đầu...")
+    result = get_xsmb_result()
+    
     if result:
-        # Thêm vào lịch sử nếu ngày mới
         if data["last_date"] != result["date"]:
             data["history"].append(result)
             data["last_date"] = result["date"]
-            # Giữ 90 ngày gần nhất
             if len(data["history"]) > 90:
                 data["history"] = data["history"][-90:]
             save_data(data)
-            print(f"✅ Đã lưu dữ liệu: {result['date']}")
+            print(f"✅ Đã lưu: {result['date']}")
 
-        # Tạo dự báo & gửi
         pred = analyze(data["history"])
         if pred:
-            msg = build_report(result, pred)
-            if send_tg(msg):
+            if send_tg(build_report(result, pred)):
                 print("✅ Đã gửi báo cáo Telegram!")
+                last_send_date = datetime.now(vn_tz).strftime("%d/%m/%Y")
             else:
-                print("❌ Gửi tin thất bại — kiểm tra TOKEN & CHAT_ID")
+                print("❌ Gửi thất bại — kiểm tra TOKEN & CHAT_ID")
         else:
-            print("⚠️ Chưa đủ dữ liệu để dự báo (cần ít nhất 10 ngày)")
+            print("⚠️ Chưa đủ dữ liệu")
     else:
-        print("❌ Không lấy được kết quả XSMB")
+        print("❌ Không lấy được kết quả")
 
-    # 4. Vòng lặp cập nhật định kỳ
-    last_check_date = datetime.now().strftime("%d/%m/%Y")
-
+    # Vòng lặp chính — Gửi lúc 18:35 hàng ngày
     while True:
-        time.sleep(CHECK_INTERVAL)
-        today = datetime.now().strftime("%d/%m/%Y")
+        try:
+            now_vn = datetime.now(vn_tz)
+            today_str = now_vn.strftime("%d/%m/%Y")
+            hour, minute = now_vn.hour, now_vn.minute
 
-        # Chỉ cập nhật 1 lần mỗi ngày
-        if last_check_date != today:
-            print(f"🔄 Kiểm tra dữ liệu mới — {today}")
-            result = get_xsmb_result()
-            if result and data["last_date"] != result["date"]:
-                data["history"].append(result)
-                data["last_date"] = result["date"]
-                if len(data["history"]) > 90:
-                    data["history"] = data["history"][-90:]
-                save_data(data)
-                pred = analyze(data["history"])
-                if pred:
-                    send_tg(build_report(result, pred))
-                    print(f"✅ Đã gửi báo cáo ngày {today}")
-            last_check_date = today
+            # Chỉ gửi 18:35 và chưa gửi hôm nay
+            if hour == 18 and minute >= 35 and last_send_date != today_str:
+                print(f"⏰ Đến giờ gửi: {today_str}")
+                result = get_xsmb_result()
+                
+                if result:
+                    if data["last_date"] != result["date"]:
+                        data["history"].append(result)
+                        data["last_date"] = result["date"]
+                        if len(data["history"]) > 90:
+                            data["history"] = data["history"][-90:]
+                        save_data(data)
+                    
+                    pred = analyze(data["history"])
+                    if pred and send_tg(build_report(result, pred)):
+                        print(f"✅ Đã gửi tự động: {today_str}")
+                        last_send_date = today_str
+                else:
+                    print("⚠️ Không lấy được dữ liệu lúc 18:35")
+
+            time.sleep(60)
+        except Exception as e:
+            print(f"⚠️ Lỗi vòng lặp: {e}")
+            time.sleep(60)
 
 if __name__ == "__main__":
     main()
