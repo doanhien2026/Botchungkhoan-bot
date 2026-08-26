@@ -1,11 +1,10 @@
 # =========================================================
-# BOT XSMB - VERSION 4.2.0 (CÀO KẾT QUẢ & FIX LỖI 409)
+# BOT XSMB - VERSION 4.3.0 (CÀO KẾT QUẢ API & FIX KHÔNG LỖI)
 # =========================================================
 import os
 import time
 import requests
 import threading
-from bs4 import BeautifulSoup
 from flask import Flask
 from datetime import datetime, timezone, timedelta
 
@@ -17,7 +16,7 @@ CHAT_ID = "1030583610"
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 4.2.0 - Active 24/7", 200
+    return "XSMB Bot Ver 4.3.0 - Active 24/7", 200
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -34,32 +33,47 @@ def send_telegram(message):
         print(f"❌ Lỗi gửi Telegram: {e}")
         return False
 
-# --- CÀO KẾT QUẢ XSMB NGÀY HÔM QUA ---
+# --- HÀM TỰ ĐỘNG CÀO KẾT QUẢ XSMB NGÀY HÔM QUA QUA API ---
 def get_yesterday_xsmb():
     vn_tz = timezone(timedelta(hours=7))
     yesterday = datetime.now(vn_tz) - timedelta(days=1)
     date_str = yesterday.strftime("%d-%m-%Y")
     display_date = yesterday.strftime("%d/%m/%Y")
     
-    headers = {"User-Agent": "Mozilla/5.0"}
-    url = f"https://xoso.com.vn/xsmb-{date_str}.html"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
     
+    # Sử dụng API JSON của Ketqua.vn / Xoso.com.vn (Bypasses HTML parser)
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        url = f"https://api.xoso.com.vn/api/xsmb?date={date_str}"
+        res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            db_el = soup.find("span", class_="special-prize") or soup.find("td", class_="v-gdb")
-            db = db_el.text.strip() if db_el else "N/A"
+            data = res.json()
+            db = data.get("gdb", ["N/A"])[0]
+            g1 = data.get("g1", ["N/A"])[0]
+            return {"date": display_date, "db": db, "g1": g1}
+    except Exception:
+        pass
+
+    # Nguồn dự phòng 2: cào nhanh qua regex
+    try:
+        url2 = f"https://xoso.com.vn/xsmb-{date_str}.html"
+        res2 = requests.get(url2, headers=headers, timeout=8)
+        if res2.status_code == 200:
+            import re
+            db_match = re.search(r'class="v-gdb"[^>]*>(\d+)</td>', res2.text)
+            g1_match = re.search(r'class="v-g1"[^>]*>(\d+)</td>', res2.text)
             
-            g1_el = soup.find("td", class_="v-g1")
-            g1 = g1_el.text.strip() if g1_el else "N/A"
-            
+            db = db_match.group(1) if db_match else "Chưa cập nhật"
+            g1 = g1_match.group(1) if g1_match else "Chưa cập nhật"
             return {"date": display_date, "db": db, "g1": g1}
     except Exception as e:
-        print(f"❌ Lỗi cào dữ liệu: {e}")
+        print(f"❌ Lỗi lấy kết quả XSMB: {e}")
         
     return {"date": display_date, "db": "Chưa có", "g1": "Chưa có"}
 
+# --- TẠO NỘI DUNG VÀ GỬI TIN NHẮN ---
 def run_xsmb_job():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
@@ -68,8 +82,8 @@ def run_xsmb_job():
     y_data = get_yesterday_xsmb()
     
     msg = f"📊 *KẾT QUẢ XSMB HÔM QUA ({y_data['date']})*\n"
-    msg += f"🏆 *Đặc biệt:* `{y_data['db']}`\n"
-    msg += f"🥇 *Giải nhất:* `{y_data['g1']}`\n"
+    msg += f"🏆 *Giải Đặc Biệt:* `{y_data['db']}`\n"
+    msg += f"🥇 *Giải Nhất:* `{y_data['g1']}`\n"
     msg += "-----------------------------------\n"
     msg += f"🤖 *BOT DỰ ĐOÁN XSMB HÔM NAY*\n"
     msg += f"⏰ *Thời gian VN:* `{now_str}`\n\n"
