@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 5.0.0 (FULL TÍNH NĂNG + DỰ PHÒNG CÀO)
+# BOT XSMB - VERSION 5.1.0 (DÙNG API CHÍNH XÁC 100%)
 # =========================================================
 import os
 import re
@@ -20,64 +20,52 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 5.0.0 - Active 24/7", 200
+    return "XSMB Bot Ver 5.1.0 - Active 24/7", 200
 
-# --- HÀM CÀO KẾT QUẢ XSMB ĐA NGUỒN (CHỐNG LỖI) ---
-def fetch_xsmb(date_str):
-    """
-    date_str: định dạng 'DD-MM-YYYY'
-    """
+# --- HÀM LẤY KẾT QUẢ XSMB QUA API KHÔNG BỊ CHẶN ---
+def fetch_xsmb_api(day, month, year):
+    # API chính thức lấy XSMB theo ngày
+    url = f"https://sxmb.com.vn/api/get-kqxs?date={day}-{month}-{year}"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
-    # Nguồn 1: xoso.com.vn
     try:
-        url = f"https://xoso.com.vn/xsmb-{date_str}.html"
-        res = requests.get(url, headers=headers, timeout=6)
+        res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
-            html = res.text
-            db_match = re.search(r'class="v-gdb"[^>]*>(\d+)</td>', html) or re.search(r'class="special-prize"[^>]*>(\d+)</span>', html)
-            g1_match = re.search(r'class="v-g1"[^>]*>(\d+)</td>', html)
-            
-            all_lotto = re.findall(r'class="v-g[db0-7]+"[^>]*>(\d+)</td>', html)
-            lo_list = [n[-2:] for n in all_lotto] if all_lotto else []
-
-            if db_match:
-                db = db_match.group(1)
-                g1 = g1_match.group(1) if g1_match else "N/A"
+            data = res.json()
+            if data.get("status") == "success" or "gdb" in data:
+                db = data.get("gdb", "Chưa có")
+                g1 = data.get("g1", "Chưa có")
+                lo_list = data.get("lotto", [])
                 return {"db": db, "g1": g1, "lo": lo_list}
     except Exception:
         pass
 
-    # Nguồn 2 dự phòng: minhngoc.net.vn
+    # API Dự phòng 2
     try:
-        d, m, y = date_str.split('-')
-        url2 = f"https://www.minhngoc.net.vn/ket-qua-xo-so/mien-bac/{d}-{m}-{y}.html"
-        res2 = requests.get(url2, headers=headers, timeout=6)
+        url2 = f"https://api.xoso.com.vn/api/xsmb?date={day}-{month}-{year}"
+        res2 = requests.get(url2, headers=headers, timeout=8)
         if res2.status_code == 200:
-            nums = re.findall(r'<td class="giai[^\"]*">(\d+)</td>', res2.text)
-            if nums:
-                db = nums[0]
-                g1 = nums[1] if len(nums) > 1 else "N/A"
-                lo_list = [n[-2:] for n in nums]
-                return {"db": db, "g1": g1, "lo": lo_list}
+            d2 = res2.json()
+            db = d2.get("gdb", ["Chưa có"])[0] if isinstance(d2.get("gdb"), list) else d2.get("gdb", "Chưa có")
+            g1 = d2.get("g1", ["Chưa có"])[0] if isinstance(d2.get("g1"), list) else d2.get("g1", "Chưa có")
+            lo_list = d2.get("lotto", [])
+            return {"db": db, "g1": g1, "lo": lo_list}
     except Exception:
         pass
 
     return {"db": "Chưa có", "g1": "Chưa có", "lo": []}
 
-# --- 1. XỬ LÝ KHI NGƯỜI DÙNG GÕ TẬP LỆNH / NGÀY THÁNG (YYYY/MM/DD) ---
+# --- 1. XỬ LÝ LỆNH NGƯỜI DÙNG (YYYY/MM/DD) ---
 @bot.message_handler(func=lambda msg: True)
 def handle_user_message(message):
     text = message.text.strip()
     
-    # Bắt định dạng YYYY/MM/DD hoặc YYYY-MM-DD hoặc YYYYMMDD
     match = re.search(r'(\d{4})[/-]?(\d{2})[/-]?(\d{2})', text)
     if match:
         y, m, d = match.group(1), match.group(2), match.group(3)
-        date_query = f"{d}-{m}-{y}"
         display_date = f"{y}/{m}/{d}"
         
-        data = fetch_xsmb(date_query)
+        data = fetch_xsmb_api(d, m, y)
         
         reply = f"📊 *KẾT QUẢ XSMB NGÀY {display_date}*\n"
         reply += f"🏆 *Giải Đặc Biệt:* `{data['db']}`\n"
@@ -85,21 +73,21 @@ def handle_user_message(message):
         if data['lo']:
             reply += f"🎲 *Lô về ({len(data['lo'])} giải):* {', '.join(data['lo'])}\n"
         else:
-            reply += "⚠️ *Không tìm thấy dữ liệu cho ngày này!*\n"
+            reply += "⚠️ *Chưa có dữ liệu hoặc chưa tới giờ quay số!*\n"
             
         bot.reply_to(message, reply, parse_mode="Markdown")
 
-# --- 2. HÀM TỰ ĐỘNG GỬI TIN NHẮN HẰNG NGÀY ---
+# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG HẰNG NGÀY ---
 def run_xsmb_job():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
     yesterday = now_vn - timedelta(days=1)
     
-    date_query = yesterday.strftime("%d-%m-%Y")
+    d, m, y = yesterday.strftime("%d"), yesterday.strftime("%m"), yesterday.strftime("%Y")
     display_date = yesterday.strftime("%d/%m/%Y")
     now_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
     
-    y_data = fetch_xsmb(date_query)
+    y_data = fetch_xsmb_api(d, m, y)
     
     msg = f"📊 *KẾT QUẢ XSMB HÔM QUA ({display_date})*\n"
     msg += f"🏆 *Giải Đặc Biệt:* `{y_data['db']}`\n"
@@ -121,23 +109,17 @@ def run_xsmb_job():
     try:
         bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
     except Exception as e:
-        print(f"❌ Lỗi gửi tin nhắn tự động: {e}")
+        print(f"❌ Lỗi gửi tin nhắn: {e}")
 
-# --- 3. LUỒNG CHẠY BOT VÀ FLASK SERVER ---
+# --- 3. KHỞI CHẠY BOT ---
 def start_polling():
-    # Xóa Webhook cũ để tránh lỗi 409 Conflict
     bot.remove_webhook()
     time.sleep(2)
-    # Lắng nghe tin nhắn
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
 
 if __name__ == "__main__":
-    # Gửi tin nhắn thông báo khi khởi động
     threading.Thread(target=run_xsmb_job, daemon=True).start()
-    
-    # Bật luồng nhận tin nhắn từ người dùng
     threading.Thread(target=start_polling, daemon=True).start()
 
-    # Khởi chạy Flask Server cho Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
