@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 6.0.0 (SIÊU ỔN ĐỊNH - LẤY FULL DỮ LIỆU)
+# BOT XSMB - VERSION 6.1.0 (KHẮC PHỤC LỖI 409 XUNG ĐỘT BOT)
 # =========================================================
 import os
 import re
@@ -20,20 +20,19 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 6.0.0 - Active 24/7", 200
+    return "XSMB Bot Ver 6.1.0 - Active 24/7", 200
 
-# --- HÀM LẤY KẾT QUẢ XSMB CHÍNH XÁC QUA API ---
+# --- HÀM LẤY KẾT QUẢ XSMB QUA API KHÔNG BỊ CẮT SỐ ---
 def fetch_xsmb(d, m, y):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    date_formatted = f"{d}-{m}-{y}"
     
-    # Nguồn API 1: API KQXS
+    # Nguồn 1: API xoso.me
     try:
-        url = f"https://api.xoso.me/api/v1/get-kqxs-mmien-bac?date={date_formatted}"
+        url = f"https://api.xoso.me/api/v1/get-kqxs-mmien-bac?date={d}-{m}-{y}"
         res = requests.get(url, headers=headers, timeout=6)
         if res.status_code == 200:
             data = res.json()
-            if "gdb" in data:
+            if "gdb" in data and data["gdb"]:
                 db = str(data["gdb"])
                 g1 = str(data["g1"])
                 lo_list = [str(x)[-2:] for x in data.get("lotto", [])]
@@ -41,7 +40,7 @@ def fetch_xsmb(d, m, y):
     except Exception:
         pass
 
-    # Nguồn API 2 dự phòng: cào trực tiếp từ xoso.com.vn qua regex chuẩn
+    # Nguồn 2: Cào regex chuẩn xoso.com.vn
     try:
         url2 = f"https://xoso.com.vn/xsmb-{d}-{m}-{y}.html"
         res2 = requests.get(url2, headers=headers, timeout=6)
@@ -61,7 +60,7 @@ def fetch_xsmb(d, m, y):
 
     return {"db": "Chưa có", "g1": "Chưa có", "lo": []}
 
-# --- 1. XỬ LÝ KHI NGƯỜI DÙNG GÕ NĂM/THÁNG/NGÀY (YYYY/MM/DD) ---
+# --- 1. XỬ LÝ LỆNH NGƯỜI DÙNG GÕ YYYY/MM/DD ---
 @bot.message_handler(func=lambda msg: True)
 def handle_user_message(message):
     text = message.text.strip()
@@ -78,11 +77,11 @@ def handle_user_message(message):
         if data['lo']:
             reply += f"🎲 *Lô về ({len(data['lo'])} giải):*\n`{', '.join(data['lo'])}`\n"
         else:
-            reply += "⚠️ *Chưa có dữ liệu hoặc chưa tới giờ quay số!*\n"
+            reply += "⚠️ *Chưa có dữ liệu hoặc ngày chưa quay số!*\n"
             
         bot.reply_to(message, reply, parse_mode="Markdown")
 
-# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG ---
+# --- 2. GỬI KẾT QUẢ TỰ ĐỘNG HẰNG NGÀY ---
 def run_xsmb_job():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
@@ -116,19 +115,20 @@ def run_xsmb_job():
     except Exception as e:
         print(f"Lỗi gửi tin nhắn: {e}")
 
-# --- 3. KHỞI CHẠY BOT ---
+# --- 3. BỘ KHỞI CHẠY CHỐNG LỖI 409 CONFLICT ---
 def start_polling():
-    time.sleep(2)
+    time.sleep(5)  # Chờ 5s để Render ngắt hoàn toàn phiên cũ
     try:
-        bot.remove_webhook()
+        bot.remove_webhook(drop_pending_updates=True)
     except Exception:
         pass
     
     while True:
         try:
-            bot.polling(none_stop=True, interval=1, timeout=20)
-        except Exception:
-            time.sleep(5)
+            bot.polling(none_stop=True, interval=2, timeout=20)
+        except Exception as e:
+            print(f"🔄 Đang kết nối lại sau xung đột... Lỗi: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
     threading.Thread(target=run_xsmb_job, daemon=True).start()
