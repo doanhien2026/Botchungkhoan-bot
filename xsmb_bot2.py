@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 4.1.0 (FIX BS4 & FIX CONFLICT 409)
+# BOT XSMB - VERSION 4.2.0 (CÀO KẾT QUẢ & FIX LỖI 409)
 # =========================================================
 import os
 import time
@@ -17,7 +17,7 @@ CHAT_ID = "1030583610"
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 4.1.0 - Active 24/7", 200
+    return "XSMB Bot Ver 4.2.0 - Active 24/7", 200
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
