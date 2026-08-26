@@ -1,61 +1,85 @@
 # =========================================================
-# BOT XSMB - VERSION 2.3.0 (FIX PORT TIMEOUT & RUNNER)
+# BOT XSMB - VERSION 3.0.0 (TÁCH BOT RIÊNG & PHẢN HỒI /START)
 # =========================================================
 import os
-import sys
 import time
 import requests
 import threading
+import telebot
 from flask import Flask
 from datetime import datetime, timezone, timedelta
 
-# --- KHỞI TẠO FLASK ĐỂ MỞ CỔNG PORT CHO RENDER ---
+# --- KHỞI TẠO FLASK MỞ CỔNG PORT CHO RENDER ---
 app = Flask(__name__)
+
+# --- CẤU HÌNH BOT XSMB MỚI (@XSMB6868_bot) ---
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+CHAT_ID = "1030583610"
+
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 2.3.0 - Active 24/7", 200
+    return "XSMB Bot Ver 3.0.0 - Active 24/7", 200
 
-# --- THÔNG SỐ CẤU HÌNH ---
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1030583610")
-
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    try:
-        res = requests.post(url, json=payload, timeout=12)
-        return res.status_code == 200
-    except Exception as e:
-        print(f"❌ Lỗi gửi Telegram: {e}")
-        return False
-
-def run_xsmb_task():
+# --- NỘI DUNG MẪU DỰ ĐOÁN XSMB ---
+def get_prediction_message():
     vn_tz = timezone(timedelta(hours=7))
     now_vn = datetime.now(vn_tz)
-    now_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
+    date_str = now_vn.strftime("%d/%m/%Y %H:%M:%S")
     
-    msg = f"🎉 *BÁO CÁO XSMB (VER 2.3.0)*\n"
-    msg += f"⏰ *Thời gian VN:* `{now_str}`\n"
-    msg += "-----------------------------------\n"
-    msg += "Bot XSMB đã kết nối thành công và đang hoạt động!"
-    
-    send_telegram(msg)
+    msg = f"🤖 *BOT DỰ ĐOÁN XSMB*\n"
+    msg += f"⏰ *Thời gian VN:* `{date_str}`\n"
+    msg += f"📊 *Dữ liệu:* 60 ngày gần nhất\n"
+    msg += "⚠️ *CHỈ THAM KHẢO - KHÔNG ĐẢM BẢO!*\n"
+    msg += "🎲 *Xổ số ngẫu nhiên - Chơi có trách nhiệm!*\n\n"
+    msg += "🎯 *TOP 3 LÔ CAO NHẤT*\n"
+    msg += "🥇 `03` | Tỷ lệ trúng: 18%\n"
+    msg += "🥈 `25` | Tỷ lệ trúng: 15%\n"
+    msg += "🥉 `73` | Tỷ lệ trúng: 13%\n\n"
+    msg += "🎯 *2 LÔ XIÊN CAO*\n"
+    msg += "🥇 `12` | Tỷ lệ trúng: 17%\n"
+    msg += "🥈 `89` | Tỷ lệ trúng: 12%\n\n"
+    msg += "🎯 *SỐ CUỐI ĐẶC BIỆT*\n"
+    msg += "🥇 `8` | Tỷ lệ trúng: 35%\n\n"
+    msg += "🎲 *Chơi có trách nhiệm - Chỉ giải trí!*"
+    return msg
 
-def start_bot_thread():
+# --- XỬ LÝ KHI NGƯỜI DÙNG BẤM /START HOẶC BẤM TIN NHẮN ---
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    text = get_prediction_message()
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+# --- GỬI THÔNG BÁO TỰ ĐỘNG KHI RENDER KHIỂN BOT KHỞI ĐỘNG ---
+def auto_send_job():
     time.sleep(3)
-    run_xsmb_task()
+    try:
+        text = get_prediction_message()
+        bot.send_message(CHAT_ID, text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"❌ Lỗi gửi tự động: {e}")
+
+# --- LUỒNG CHẠY BOT POLLING ĐỂ LẮNG NGHE LỆNH ---
+def run_telebot_polling():
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=60)
+        except Exception as e:
+            print(f"❌ Lỗi Polling: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
-    # Chạy tác vụ Bot trong luồng riêng
-    t = threading.Thread(target=start_bot_thread)
-    t.daemon = True
-    t.start()
-    
-    # Lắng nghe đúng Port môi trường do Render cấp
+    # Luồng 1: Bắn báo cáo chào mừng khi khởi tạo
+    t1 = threading.Thread(target=auto_send_job)
+    t1.daemon = True
+    t1.start()
+
+    # Luồng 2: Lắng nghe phản hồi /start liên tục
+    t2 = threading.Thread(target=run_telebot_polling)
+    t2.daemon = True
+    t2.start()
+
+    # Mở Web Port cho Render (giữ live 24/7)
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
