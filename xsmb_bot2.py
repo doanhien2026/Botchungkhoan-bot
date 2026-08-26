@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 4.1.0 (FIX BS4 & CONFLICT 409)
+# BOT XSMB - VERSION 4.1.0 (FIX BS4 & FIX CONFLICT 409)
 # =========================================================
 import os
 import time
