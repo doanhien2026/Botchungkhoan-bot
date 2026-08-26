@@ -1,5 +1,5 @@
 # =========================================================
-# BOT XSMB - VERSION 12.0.0 (API CHÍNH THỨC MINH NGỌC)
+# BOT XSMB - VERSION 13.0.0 (API VOH TRỰC TIẾP CHUẨN 100%)
 # =========================================================
 import os
 import re
@@ -20,49 +20,58 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 @app.route('/')
 def home():
-    return "XSMB Bot Ver 12.0.0 - API Minh Ngoc Active 24/7", 200
+    return "XSMB Bot Ver 13.0.0 - VOH API Active 24/7", 200
 
-# --- HÀM LẤY KẾT QUẢ TỪ API TRỰC TIẾP ---
+# --- HÀM LẤY KẾT QUẢ TỪ API VOH & DỰ PHÒNG ---
 def fetch_xsmb(d, m, y):
-    # API trực tiếp của Minh Ngọc theo ngày DD-MM-YYYY
-    date_formatted = f"{d.zfill(2)}-{m.zfill(2)}-{y}"
-    url = f"https://www.minhngoc.com.vn/getrate/xsmb/{date_formatted}.js"
+    d_str = d.zfill(2)
+    m_str = m.zfill(2)
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://www.minhngoc.com.vn/"
+        "Accept": "application/json"
     }
-    
+
+    # --- NGUỒN 1: API VOH (Rất nhanh và không chặn Render) ---
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        url_voh = f"https://voh.com.vn/api/v1/lottery/xsmb?date={y}-{m_str}-{d_str}"
+        res = requests.get(url_voh, headers=headers, timeout=8)
         if res.status_code == 200:
-            text = res.text
-            # Tìm giải đặc biệt (5 chữ số) và giải nhất (5 chữ số) từ dữ liệu API
-            db_m = re.search(r'giai_dac_biet["\':\s]+["\']?(\d{5})["\']?', text) or \
-                   re.search(r'DB["\':\s]+["\']?(\d{5})["\']?', text) or \
-                   re.search(r'(\d{5})', text)
-                   
-            g1_m = re.search(r'giai_nhat["\':\s]+["\']?(\d{5})["\']?', text) or \
-                   re.search(r'G1["\':\s]+["\']?(\d{5})["\']?', text)
+            data = res.json()
+            # Đọc dữ liệu từ API VOH
+            lottery_data = data.get("data", {}) or data.get("result", {})
+            db = lottery_data.get("special") or lottery_data.get("giai_dac_biet") or "Chưa có"
+            g1 = lottery_data.get("first") or lottery_data.get("giai_nhat") or "Chưa có"
             
+            # Xử lý dạng list nếu API trả về danh sách
+            if isinstance(db, list) and len(db) > 0: db = db[0]
+            if isinstance(g1, list) and len(g1) > 0: g1 = g1[0]
+
+            if db != "Chưa có" and str(db).isdigit():
+                print(f"Lấy thành công từ API VOH ngày {d_str}/{m_str}/{y}")
+                return {"db": str(db), "g1": str(g1)}
+    except Exception as e:
+        print(f"Lỗi API VOH: {e}")
+
+    # --- NGUỒN 2: HTML PARSER CẢI TIẾN (XOSO.COM.VN) ---
+    try:
+        url_xoso = f"https://xoso.com.vn/xsmb-{d_str}-{m_str}-{y}.html"
+        res_xoso = requests.get(url_xoso, headers=headers, timeout=8)
+        if res_xoso.status_code == 200:
+            html = res_xoso.text
+            db_m = re.search(r'class="cls_giai_dac_biet"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html) or \
+                   re.search(r'v-gdb[^>]*>[\s\S]*?(\d{5})', html)
+            g1_m = re.search(r'class="cls_giai_nhat"[^>]*>[\s\S]*?(\d{5})[\s\S]*?<', html) or \
+                   re.search(r'v-g1[^>]*>[\s\S]*?(\d{5})', html)
+                   
             db = db_m.group(1) if db_m else "Chưa có"
             g1 = g1_m.group(1) if g1_m else "Chưa có"
             
-            return {"db": db, "g1": g1}
+            if db != "Chưa có":
+                print(f"Lấy thành công từ Nguồn Dự Phòng Xoso.com.vn")
+                return {"db": db, "g1": g1}
     except Exception as e:
-        print(f"Lỗi API: {e}")
-
-    # Nguồn API dự phòng 2 (VOH)
-    try:
-        url_voh = f"https://voh.com.vn/api/v1/lottery/xsmb?date={y}-{m.zfill(2)}-{d.zfill(2)}"
-        res_voh = requests.get(url_voh, headers=headers, timeout=10)
-        if res_voh.status_code == 200:
-            data = res_voh.json()
-            db = data.get("data", {}).get("special", "Chưa có")
-            g1 = data.get("data", {}).get("first", "Chưa có")
-            return {"db": db, "g1": g1}
-    except Exception:
-        pass
+        print(f"Lỗi Nguồn Dự Phòng: {e}")
 
     return {"db": "Chưa có", "g1": "Chưa có"}
 
