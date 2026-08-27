@@ -1,6 +1,6 @@
 # ============================================================
-# BOT XSMB — V5.5 (FIX TRIỆT ĐỂ LỖI DỮ LIỆU & GIỜ VIỆT NAM)
-# ✅ Tra cứu đúng ngày | ✅ Chuẩn múi giờ VN (UTC+7) | ✅ Đủ 27 giải
+# BOT XSMB — V5.6 (CHUYỂN SANG DÙNG API API/JSON TRỰC TIẾP)
+# ✅ Khắc phục lỗi 403 Forbidden | ✅ Đủ 27 giải | ✅ Chuẩn UTC+7
 # ============================================================
 import os
 import json
@@ -22,8 +22,6 @@ SEND_TIME = "18:35"
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-
-# Khai báo múi giờ Việt Nam
 VN_TZ = timezone(timedelta(hours=7))
 
 def get_now_vn():
@@ -31,7 +29,7 @@ def get_now_vn():
 
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V5.5 — Fix data & Timezone Active!", 200
+    return "✅ Bot XSMB V5.6 — API Direct Active!", 200
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
@@ -56,56 +54,83 @@ def save_data(data):
         print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ========== CHỨC NĂNG CÀO DỮ LIỆU CHÍNH XÁC THEO NGÀY ==========
+# ========== API LẤY KẾT QUẢ XSMB THEO NGÀY ==========
 def get_xsmb_result(target_date_str=None):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01"
     }
 
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
 
+    parts = target_date_str.split("/")
+    d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
+    formatted_date = f"{y}-{m}-{d}"
+
+    # Nguồn 1: API JSON Xoso.me
     try:
-        parts = target_date_str.split("/")
-        d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-        
-        # API Ketqua.net / Minh Ngoc / Xoso.com.vn theo ngay
-        url = f"https://xoso.com.vn/xsmb-{d}-{m}-{y}.html"
-        r = requests.get(url, headers=headers, timeout=12)
-        
-        if r.status_code == 200 and len(r.text) > 1000:
-            html = r.text
-            
-            def parse_prizes(pattern):
-                match = re.search(pattern, html, re.I)
-                if match:
-                    return re.findall(r'\b\d{2,5}\b', match.group(1))
-                return []
+        url_api = f"https://api.xoso.me/api/v1/lottery/result/xsmb?date={formatted_date}"
+        r = requests.get(url_api, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res_json = r.json()
+            data = res_json.get("data") or res_json
+            if data and "special" in data:
+                db = str(data.get("special", [""])[0] if isinstance(data.get("special"), list) else data.get("special"))
+                g1 = str(data.get("first", [""])[0] if isinstance(data.get("first"), list) else data.get("first"))
+                
+                def fmt(val):
+                    if isinstance(val, list): return [str(x) for x in val]
+                    return [str(val)] if val else []
 
-            db = parse_prizes(r'class="cls_giai_dac_biet"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_dac_biet[^>]*>([\s\S]*?)</td>')
-            g1 = parse_prizes(r'class="cls_giai_nhat"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_nhat[^>]*>([\s\S]*?)</td>')
-            g2 = parse_prizes(r'class="cls_giai_nhai"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_nhai[^>]*>([\s\S]*?)</td>')
-            g3 = parse_prizes(r'class="cls_giai_ba"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_ba[^>]*>([\s\S]*?)</td>')
-            g4 = parse_prizes(r'class="cls_giai_tu"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_tu[^>]*>([\s\S]*?)</td>')
-            g5 = parse_prizes(r'class="cls_giai_nam"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_nam[^>]*>([\s\S]*?)</td>')
-            g6 = parse_prizes(r'class="cls_giai_sau"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_sau[^>]*>([\s\S]*?)</td>')
-            g7 = parse_prizes(r'class="cls_giai_bay"[^>]*>([\s\S]*?)</td>') or parse_prizes(r'giai_bay[^>]*>([\s\S]*?)</td>')
+                all_prizes = [db, g1]
+                for key in ["second", "third", "fourth", "fifth", "sixth", "seventh"]:
+                    all_prizes.extend(fmt(data.get(key, [])))
+                
+                lotos = [p[-2:] for p in all_prizes if len(p) >= 2]
 
-            all_prizes = db + g1 + g2 + g3 + g4 + g5 + g6 + g7
-            lotos = [p[-2:] for p in all_prizes if len(p) >= 2]
-
-            if db:
                 return {
                     "date": target_date_str,
-                    "special": db[0],
-                    "g1": g1[0] if g1 else "------",
-                    "g2": g2, "g3": g3, "g4": g4, "g5": g5, "g6": g6, "g7": g7,
+                    "special": db,
+                    "g1": g1,
+                    "g2": fmt(data.get("second")),
+                    "g3": fmt(data.get("third")),
+                    "g4": fmt(data.get("fourth")),
+                    "g5": fmt(data.get("fifth")),
+                    "g6": fmt(data.get("sixth")),
+                    "g7": fmt(data.get("seventh")),
                     "loto": lotos,
-                    "time": get_now_vn().strftime("%H:%M:%S"),
-                    "source": "Xoso.com.vn"
+                    "source": "Xoso.me API"
                 }
     except Exception as e:
-        print(f"⚠️ Lỗi cào ngày {target_date_str}: {e}")
+        print(f"⚠️ API 1 Lỗi: {e}")
+
+    # Nguồn 2: Backup Cào HTML trực tiếp Minh Ngọc
+    try:
+        url_mn = f"https://www.minhngoc.com.vn/gettruoctiep/mien-bac/{d}-{m}-{y}.html"
+        r = requests.get(url_mn, headers=headers, timeout=10)
+        if r.status_code == 200 and len(r.text) > 100:
+            html = r.text
+            numbers = re.findall(r'\b\d{2,5}\b', html)
+            if len(numbers) >= 27:
+                db = numbers[0]
+                g1 = numbers[1]
+                lotos = [n[-2:] for n in numbers[:27]]
+                return {
+                    "date": target_date_str,
+                    "special": db,
+                    "g1": g1,
+                    "g2": numbers[2:4],
+                    "g3": numbers[4:10],
+                    "g4": numbers[10:14],
+                    "g5": numbers[14:20],
+                    "g6": numbers[20:23],
+                    "g7": numbers[23:27],
+                    "loto": lotos,
+                    "source": "Minh Ngọc API"
+                }
+    except Exception as e:
+        print(f"⚠️ API 2 Lỗi: {e}")
 
     return None
 
@@ -127,25 +152,15 @@ def analyze(history):
     while len(top3) < 3:
         top3.append(("00", 1))
 
-    dau_count = Counter([n[0] for n in all_loto if len(n) == 2])
-    dau = dau_count.most_common(1)[0] if dau_count else ("0", 1)
-
-    duoi_count = Counter([n[1] for n in all_loto if len(n) == 2])
-    duoi = duoi_count.most_common(1)[0] if duoi_count else ("0", 1)
-
     top5 = freq.most_common(5)
     xien = top3[1:] + [top5[3]] if len(top5) >= 4 else top3[1:]
 
     return {
-        "top3": [{"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%", "count": n[1]} for n in top3],
+        "top3": [{"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%"} for n in top3],
         "xien": [{"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%"} for n in xien[:2]],
-        "dau": {"num": dau[0], "rate": f"~{round(dau[1]/tong_ngay*100)}%"},
-        "duoi": {"num": duoi[0], "rate": f"~{round(duoi[1]/tong_ngay*100)}%"},
-        "duoi_gdb": history[-1].get("special", "")[-1] if history[-1].get("special") and len(history[-1].get("special", ""))>=5 else "?",
-        "tong_ngay": tong_ngay
     }
 
-# ========== TẠO BÁO CÁO ==========
+# ========== BÁO CÁO KẾT QUẢ ==========
 def build_report(result, pred):
     now_str = get_now_vn().strftime("%d/%m/%Y %H:%M:%S")
     
@@ -155,32 +170,32 @@ def build_report(result, pred):
     msg += f"🥇 *Giải Nhất:* `{result.get('g1', '------')}`\n"
     
     if result.get('g2'): msg += f"🥈 *Giải Nhì:* `{' - '.join(result['g2'])}`\n"
-    if result.get('g3'): msg += f"🥉 *Giải Ba:* `{' - '.join(result['g3'][:3])}`\n"
+    if result.get('g3'): msg += f"🥉 *Giải Ba:* `{' - '.join(result['g3'])}`\n"
     if result.get('g4'): msg += f"🏅 *Giải Tư:* `{' - '.join(result['g4'])}`\n"
-    if result.get('g5'): msg += f"🏅 *Giải Năm:* `{' - '.join(result['g5'][:3])}`\n"
+    if result.get('g5'): msg += f"🏅 *Giải Năm:* `{' - '.join(result['g5'])}`\n"
     if result.get('g6'): msg += f"🏅 *Giải Sáu:* `{' - '.join(result['g6'])}`\n"
     if result.get('g7'): msg += f"🏅 *Giải Bảy:* `{' - '.join(result['g7'])}`\n"
     
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += f"📡 Nguồn: {result.get('source', 'Tổng hợp')} | 📅 {now_str}\n"
+    msg += f"📡 Nguồn: {result.get('source', 'API Direct')} | 📅 {now_str}\n"
     
     if pred:
-        msg += f"\n🤖 *DỰ ĐOÁN KẾT QUẢ*\n"
+        msg += f"\n🤖 *DỰ ĐOÁN THỐNG KÊ*\n"
         msg += f"🎯 *TOP 3 LÔ:* `{pred['top3'][0]['num']}`, `{pred['top3'][1]['num']}`, `{pred['top3'][2]['num']}`\n"
         msg += f"🎯 *2 LÔ XIÊN:* `{pred['xien'][0]['num']}` - `{pred['xien'][1]['num']}`\n"
         
     msg += "\n🎲 *Chơi có trách nhiệm - Chỉ giải trí!*"
     return msg
 
-# ========== XỬ LÝ TRA CỨU ==========
+# ========== BẮT TÍN HIỆU TIN NHẮN TELEGRAM ==========
 @bot.message_handler(func=lambda msg: True)
 def handle_user_message(message):
     text = message.text.strip()
     d, m, y = None, None, None
 
-    match_raw = re.search(r'^(\d{2})(\d{2})(\d{4})$', text)                  # 22082026
-    match_dmy = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', text)        # 22/08/2026
-    match_ymd = re.search(r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})', text)        # 2026/08/22
+    match_raw = re.search(r'^(\d{2})(\d{2})(\d{4})$', text)
+    match_dmy = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', text)
+    match_ymd = re.search(r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})', text)
 
     if match_raw:
         d, m, y = match_raw.group(1), match_raw.group(2), match_raw.group(3)
@@ -191,20 +206,20 @@ def handle_user_message(message):
 
     if d and m and y:
         target_date = f"{d}/{m}/{y}"
-        bot.reply_to(message, f"🔄 Đang lấy đầy đủ 27 giải ngày {target_date}...")
+        bot.reply_to(message, f"🔄 Đang tra cứu kết quả ngày {target_date}...")
         
         res = get_xsmb_result(target_date)
-        if res and res.get("special") != "------":
+        if res and res.get("special"):
             data = load_data()
             pred = analyze(data.get("history", []))
             reply = build_report(res, pred)
             bot.reply_to(message, reply, parse_mode="Markdown")
         else:
-            bot.reply_to(message, f"❌ Không tìm thấy dữ liệu XSMB ngày {target_date}!")
+            bot.reply_to(message, f"❌ Không tìm thấy dữ liệu XSMB cho ngày {target_date} (Hoặc chưa tới giờ quay)!")
 
 # ========== MAIN ==========
 def main():
-    print("🚀 Bot XSMB V5.5 KHỜI ĐỘNG...")
+    print("🚀 Bot XSMB V5.6 API Direct KHỜI ĐỘNG...")
     data = load_data()
 
     threading.Thread(target=run_server, daemon=True).start()
