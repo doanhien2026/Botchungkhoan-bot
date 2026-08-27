@@ -6,6 +6,9 @@ from flask import Flask
 from threading import Thread
 from config import TELEGRAM_TOKEN, CHAT_ID, PORT, AUTO_SEND_TIME
 from fetcher import fetch_result
+# === ✅ THÊM DÒNG NÀY Ở ĐẦU FILE ===
+from predictor import generate_prediction
+# ===================================
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -18,25 +21,53 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
 
-# ========== LỆNH /START ==========
+# ========== LỆNH /START — CẬP NHẬT HƯỚNG DẪN ==========
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     if str(message.chat.id) not in [CHAT_ID, CHAT_ID.replace('-100','')]:
         bot.send_message(message.chat.id, "❌ Không có quyền sử dụng bot này.")
         return
     bot.send_message(message.chat.id,
-        "🤖 **BOT XSMB — LẤY KẾT QUẢ THỰC**\n"
+        "🤖 **BOT XSMB — LẤY KẾT QUẢ & DỰ ĐOÁN**\n"
         "📡 Nguồn: XOSODAIPHAT + XOSO.com.vn\n"
         "✅ Chỉ trả kết quả thực tế — KHÔNG tạo số giả\n"
-        "💾 Lưu lịch sử tự động | ⏰ Tự động gửi 18:35\n\n"
-        "📌 Gõ ngày: **DDMMYYYY** (VD: 24082026)"
+        "💾 Dữ liệu đã lưu được bảo toàn\n"
+        "⏰ Tự động gửi 18:35 hàng ngày\n\n"
+        "📌 **CÁCH DÙNG:**\n"
+        "• Gõ ngày: **DDMMYYYY** (VD: 24082026) → xem kết quả thực tế\n"
+        "• Gõ: **/dudoan** → 3 lô + 1 xiên + đầu số đề dự kiến\n"
+        "• Gõ: **/thongke** → Báo cáo thống kê 60 ngày"
     )
 
-# ========== XỬ LÝ TIN NHẮN — NHẬP NGÀY ==========
+# ========== ✅ LỆNH DỰ ĐOÁN MỚI — KHÔNG ẢNH HƯỞNG DỮ LIỆU ==========
+@bot.message_handler(commands=['dudoan', 'thongke'])
+def cmd_dudoan(message):
+    user_id = str(message.chat.id)
+    if user_id not in [CHAT_ID, CHAT_ID.replace('-100','')]:
+        return
+    
+    bot.send_message(user_id, "📊 Đang phân tích dữ liệu đã lưu...")
+    report = generate_prediction(days=60)
+    
+    if not report:
+        bot.send_message(user_id,
+            "⚠️ Chưa có đủ dữ liệu để phân tích!\n"
+            "→ Hãy tra cứu thêm kết quả các ngày trước nhé.\n"
+            "→ Dữ liệu cũ vẫn được bảo toàn ✅"
+        )
+        return
+    
+    bot.send_message(user_id, report, parse_mode="Markdown")
+
+# ========== XỬ LÝ NHẬP NGÀY — GIỮ NGUYÊN TOÀN BỘ CŨ ==========
 @bot.message_handler(func=lambda msg: True)
 def handle_message(message):
     user_id = str(message.chat.id)
     text = message.text.strip()
+    
+    # Bỏ qua lệnh đã xử lý ở trên
+    if text.startswith('/'):
+        return
     
     if user_id not in [CHAT_ID, CHAT_ID.replace('-100','')]:
         return
@@ -45,7 +76,7 @@ def handle_message(message):
         bot.send_message(user_id, 
             "⚠️ Định dạng sai!\n"
             "Ví dụ: **24082026** (DDMMYYYY)\n"
-            "Gõ ngày đã qua để xem kết quả thực tế."
+            "Hoặc gõ /dudoan để xem dự đoán"
         )
         return
     
@@ -60,14 +91,13 @@ def handle_message(message):
         if not result:
             bot.send_message(user_id,
                 f"⚠️ **CHƯA CÓ KẾT QUẢ THỰC TẾ — {date_str}**\n\n"
-                "→ Nếu là hôm nay: Kết quả sẽ có sau **18:35**\n"
-                "→ Nếu là ngày tương lai: Chưa có kết quả\n"
-                "→ Nếu là ngày quá khứ: Nguồn tạm thời không truy cập được\n\n"
-                "❌ **Bot KHÔNG tạo số giả** — vui lòng thử lại sau nhé!"
+                "→ Nếu là hôm nay: Kết quả sau **18:35**\n"
+                "→ Nếu là tương lai: Chưa có kết quả\n"
+                "→ Dữ liệu đã lưu: **Được bảo toàn ✅**"
             )
             return
         
-        # === GỬI KẾT QUẢ THỰC TẾ ===
+        # === GỬI KẾT QUẢ — GIỮ NGUYÊN CŨ ===
         reply = (
             f"📅 **KẾT QUẢ XSMB — {date_str}**\n"
             f"📊 Nguồn: {result['source']}\n"
@@ -83,12 +113,12 @@ def handle_message(message):
         bot.send_message(user_id, reply, parse_mode="Markdown")
         
     except ValueError:
-        bot.send_message(user_id, "❌ Ngày không hợp lệ! Kiểm tra lại nhé.")
+        bot.send_message(user_id, "❌ Ngày không hợp lệ!")
     except Exception as e:
         print(f"❌ Lỗi: {e}")
         bot.send_message(user_id, "❌ Lỗi xử lý. Thử lại sau nhé.")
 
-# ========== TỰ ĐỘNG GỬI 18:35 ==========
+# ========== TỰ ĐỘNG GỬI 18:35 — GIỮ NGUYÊN CŨ ==========
 def auto_scheduler():
     last_sent = ""
     print("⏰ Lịch trình tự động 18:35 đã bật")
@@ -117,37 +147,32 @@ def auto_scheduler():
             print(f"❌ Lỗi lịch trình: {e}")
             time.sleep(60)
 
-# ========== KHỞI ĐỘNG — ĐÚNG CÁCH, KHÔNG LỖI 409 ==========
+# ========== KHỞI ĐỘNG — GIỮ NGUYÊN CŨ, KHÔNG ĐỔI GÌ ==========
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — SỬA LỖI THAM SỐ + TRÁNH 409")
+    print("🚀 BOT XSMB — ĐÃ THÊM DỰ ĐOÁN | DỮ LIỆU BẢO TOÀN")
     print("📡 Nguồn: XOSODAIPHAT + XOSO.com.vn")
     print("="*60)
     
-    # === QUAN TRỌNG 1: XÓA WEBHOOK CŨ → TRÁNH XUNG ĐỘT ===
     bot.remove_webhook()
-    time.sleep(1)  # Đảm bảo xóa hoàn toàn
+    time.sleep(1)
     print("🔄 Đã xóa webhook cũ")
     
-    # === KHỞI ĐỘNG FLASK ===
     Thread(target=run_flask, daemon=True).start()
     print("🌐 Flask server chạy ngầm")
     
-    # === KHỞI ĐỘNG LỊCH TRÌNH ===
     Thread(target=auto_scheduler, daemon=True).start()
     print("⏰ Lịch trình 18:35 đã bật")
     
-    print("✅ Bot sẵn sàng — KHÔNG DÙNG tham số threaded")
+    print("✅ Bot sẵn sàng — Dữ liệu cũ: KHÔNG THAY ĐỔI ✅")
     print("="*60)
     
-    # === ✅ ĐÚNG CÁCH: KHÔNG CÓ THAM SỐ THREADED ===
     while True:
         try:
             bot.infinity_polling(
                 timeout=60,
                 long_polling_timeout=60,
                 allowed_updates=['message', 'callback_query']
-                # ⚠️ KHÔNG ĐƯA THAM SỐ THREADED VÀO — NÓ KHÔNG TỒN TẠI!
             )
         except Exception as e:
             print(f"⚠️ Lỗi kết nối: {e}")
