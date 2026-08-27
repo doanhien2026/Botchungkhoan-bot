@@ -136,16 +136,17 @@ if __name__ == "__main__":
     Thread(target=auto_scheduler, daemon=True).start()
     print("⏰ Lịch trình tự động 18:35 đã bật")
     
-    print("✅ Bot sẵn sàng! Chỉ 1 luồng — KHÔNG LỖI 409")
+    print("✅ Bot sẵn sàng! CHỈ 1 LUỒNG — KHÔNG LỖI 409")
     print("="*60)
     
-    # === CHỈ 1 LUỒNG → KHÔNG LỖI 409 ===
+    # === ✅ TẮT ĐA LUỒNG = threaded=False → KHÔNG CÒN LỖI 409 ===
     while True:
         try:
             bot.infinity_polling(
                 timeout=60,
                 long_polling_timeout=60,
-                allowed_updates=['message', 'callback_query']
+                allowed_updates=['message', 'callback_query'],
+                threaded=False  # ← QUAN TRỌNG NHẤT: TẮT ĐA LUỒNG
             )
         except Exception as e:
             print(f"⚠️ Lỗi kết nối: {e}")
