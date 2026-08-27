@@ -15,7 +15,7 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 # === FLASK ROUTE ===
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V7.3 — Lấy dữ liệu thực từ KETQUA.net | Không tạo số giả", 200
+    return "✅ Bot XSMB V7.4 — Đã sửa lỗi 409 | Lấy dữ liệu KETQUA.net", 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
@@ -26,7 +26,6 @@ def cmd_start(message):
     user_id = message.chat.id
     print(f"📩 /start từ {user_id}")
     
-    # Kiểm tra quyền
     allowed_ids = [str(CHAT_ID), str(CHAT_ID).replace('-100', '')]
     if str(user_id) not in allowed_ids:
         bot.send_message(user_id, "❌ Bạn không có quyền sử dụng bot này.")
@@ -34,12 +33,12 @@ def cmd_start(message):
     
     bot.send_message(user_id,
         "🤖 **BOT XSMB — LẤY KẾT QUẢ THỰC**\n"
-        "📡 Nguồn: KETQUA.net (chính thức)\n"
+        "📡 Nguồn: KETQUA.net\n"
         "✅ Không tạo số giả — chỉ trả kết quả thực!\n"
-        "💾 Tự động lưu dữ liệu lịch sử\n\n"
+        "💾 Tự động lưu lịch sử\n"
+        "⏰ Tự động gửi 18:35 hàng ngày\n\n"
         "📌 Gõ ngày: **DDMMYYYY**\n"
-        "Ví dụ: 26082026\n\n"
-        "⏰ Tự động gửi kết quả mỗi ngày 18:35"
+        "Ví dụ: 26082026"
     )
 
 # === XỬ LÝ TIN NHẮN ===
@@ -49,12 +48,10 @@ def handle_message(message):
     text = message.text.strip()
     print(f"📩 [{user_id}] Nhận: {text}")
     
-    # Kiểm tra quyền
     allowed_ids = [str(CHAT_ID), str(CHAT_ID).replace('-100', '')]
     if str(user_id) not in allowed_ids:
         return
     
-    # Kiểm tra định dạng ngày DDMMYYYY
     if not re.match(r"^\d{8}$", text):
         bot.send_message(user_id,
             "⚠️ **Định dạng không đúng!**\n"
@@ -69,12 +66,10 @@ def handle_message(message):
         y = text[4:8]
         date_str = f"{d}/{m}/{y}"
         
-        # Kiểm tra ngày hợp lệ
         datetime(int(y), int(m), int(d))
         
         bot.send_message(user_id, f"🔍 Đang lấy dữ liệu ngày **{date_str}** từ KETQUA.net...")
         
-        # === LẤY KẾT QUẢ THỰC ===
         result = get_xsmb_result(date_str)
         
         if not result:
@@ -87,7 +82,6 @@ def handle_message(message):
             )
             return
         
-        # === CÓ DỮ LIỆU THỰC → HIỂN THỊ ===
         special = result.get("special", "")
         g1 = result.get("g1", "")
         loto = result.get("loto", [])
@@ -129,7 +123,6 @@ def auto_scheduler():
             now = get_now_vn()
             today_str = now.strftime("%d/%m/%Y")
             
-            # Gửi vào 18:35 mỗi ngày, chỉ gửi 1 lần/ngày
             if now.hour == 18 and 35 <= now.minute <= 45 and last_date_sent != today_str:
                 print(f"⏰ Đến giờ tự động gửi kết quả ngày {today_str}")
                 
@@ -148,32 +141,48 @@ def auto_scheduler():
                 else:
                     print(f"⚠️ Chưa có dữ liệu ngày {today_str} — bỏ qua gửi tự động")
             
-            time.sleep(30)  # Kiểm tra mỗi 30 giây
+            time.sleep(30)
             
         except Exception as e:
             print(f"❌ Lỗi lịch trình: {e}")
             time.sleep(60)
 
-# === KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG ===
+# === KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG — ĐÃ SỬA LỖI 409 ===
 if __name__ == '__main__':
     print("=" * 60)
-    print("🚀 BOT XSMB — PHIÊN BẢN V7.3")
+    print("🚀 BOT XSMB — PHIÊN BẢN V7.4 (SỬA LỖI 409)")
     print("📡 Nguồn dữ liệu: KETQUA.net")
-    print("✅ Tính năng: Không tạo số giả | Lưu lịch sử | Tự động gửi 18:35")
+    print("✅ Không tạo số giả | Lưu lịch sử | Tự động 18:35")
     print("=" * 60)
     print(f"📂 Đã có {len(get_all_dates())} ngày dữ liệu trong kho")
     
-    # Khởi động Flask
-    Thread(target=run_flask, daemon=True).start()
-    
-    # Khởi động lịch trình tự động
-    Thread(target=auto_scheduler, daemon=True).start()
-    
-    # Xóa webhook cũ — tránh xung đột
+    # XÓA WEBHOOK CŨ — TRÁNH XUNG ĐỘT
     bot.remove_webhook()
+    print("🔄 Đã xóa webhook cũ")
+    
+    # KHỞI ĐỘNG FLASK
+    Thread(target=run_flask, daemon=True).start()
+    print("🌐 Flask web server đã chạy")
+    
+    # KHỞI ĐỘNG LỊCH TRÌNH
+    Thread(target=auto_scheduler, daemon=True).start()
+    print("⏰ Lịch trình tự động đã bật — Gửi kết quả lúc 18:35 hàng ngày")
     
     print("✅ Bot đã sẵn sàng! Đang lắng nghe tin nhắn Telegram...")
     print("=" * 60)
     
-    # === BẮT ĐẦU LẮNG NGHE TELEGRAM — QUAN TRỌNG NHẤT ===
-    bot.infinity_polling(timeout=60)
+    # === QUAN TRỌNG: CHỈ 1 LUỒNG → KHÔNG LỖI 409 ===
+    try:
+        bot.infinity_polling(
+            timeout=60,
+            long_polling_timeout=60,
+            allowed_updates=['message', 'callback_query']
+        )
+    except Exception as e:
+        print(f"⚠️ Lỗi polling: {e} — Đang thử lại sau 10 giây...")
+        time.sleep(10)
+        bot.infinity_polling(
+            timeout=60,
+            long_polling_timeout=60,
+            allowed_updates=['message', 'callback_query']
+        )
