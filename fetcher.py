@@ -25,7 +25,7 @@ def get_xsmb_result(target_date_str=None):
         "Accept-Language": "vi-VN,vi;q=0.9"
     }
 
-    # === NGUỒN 1: API VNPAY (chính) ===
+    # NGUỒN 1: VNPAY API
     try:
         url = f"https://api.vnpay.vn/vnpay-kqxs/xsmb?date={date_api}"
         r = requests.get(url, headers=headers, timeout=20)
@@ -44,17 +44,15 @@ def get_xsmb_result(target_date_str=None):
                 all_nums = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
                 lotos = [n[-2:] for n in all_nums if len(n) >= 2]
                 
-                print(f"✅ [VNPAY API] {display_date} | GĐB: {db}")
+                print(f"✅ [VNPAY] {display_date} | GĐB: {db}")
                 return {
-                    "date": display_date,
-                    "special": db, "g1": g1, "g2": g2, "g3": g3,
-                    "g4": g4, "g5": g5, "g6": g6, "g7": g7,
-                    "loto": lotos, "source": "VNPAY API"
+                    "date": display_date, "special": db, "g1": g1, "g2": g2, "g3": g3,
+                    "g4": g4, "g5": g5, "g6": g6, "g7": g7, "loto": lotos, "source": "VNPAY API"
                 }
     except Exception as e:
-        print(f"⚠️ [VNPAY API] Lỗi: {str(e)[:40]}")
+        print(f"⚠️ [VNPAY] Lỗi: {str(e)[:40]}")
 
-    # === NGUỒN 2: KQXS.VN (dự phòng 1) ===
+    # NGUỒN 2: KQXS.VN
     try:
         url = f"https://kqxs.vn/xsmb/{y}-{m}-{d}"
         r = requests.get(url, headers=headers, timeout=20)
@@ -71,14 +69,11 @@ def get_xsmb_result(target_date_str=None):
                     lotos = [n for n in lotos if n.isdigit() and n != '00' and len(n) == 2][:27]
                 if len(lotos) >= 20:
                     print(f"✅ [KQXS.vn] {display_date} | GĐB: {db}")
-                    return {
-                        "date": display_date, "special": db, "g1": g1,
-                        "loto": lotos, "source": "KQXS.vn"
-                    }
+                    return {"date": display_date, "special": db, "g1": g1, "loto": lotos, "source": "KQXS.vn"}
     except Exception as e:
         print(f"⚠️ [KQXS.vn] Lỗi: {str(e)[:40]}")
 
-    # === NGUỒN 3: XOSO.WAP.VN (dự phòng 2) ===
+    # NGUỒN 3: XOSO.WAP.VN
     try:
         url = f"https://xoso.wap.vn/xsmb/{y}/{m}/{d}"
         r = requests.get(url, headers=headers, timeout=20)
@@ -93,15 +88,12 @@ def get_xsmb_result(target_date_str=None):
                 lotos = [n for n in lotos if n.isdigit() and n != '00' and len(n) == 2][:27]
                 if len(lotos) >= 20:
                     print(f"✅ [Xoso.wap.vn] {display_date} | GĐB: {db}")
-                    return {
-                        "date": display_date, "special": db, "g1": g1,
-                        "loto": lotos, "source": "Xoso.wap.vn"
-                    }
+                    return {"date": display_date, "special": db, "g1": g1, "loto": lotos, "source": "Xoso.wap.vn"}
     except Exception as e:
         print(f"⚠️ [Xoso.wap.vn] Lỗi: {str(e)[:40]}")
 
-    # === TẤT CẢ NGUỒN LỖI → TẠO DỮ LIỆU MẪU ===
-    print(f"⚠️ Tất cả nguồn không truy cập được — tạo dữ liệu mẫu {display_date}")
+    # TẤT CẢ NGUỒN LỖI → DỮ LIỆU MẪU
+    print(f"⚠️ Tạo dữ liệu mẫu {display_date}")
     seed_value = int(f"{y}{m}{d}")
     random.seed(seed_value)
     
@@ -115,30 +107,21 @@ def get_xsmb_result(target_date_str=None):
     lotos = [n[-2:] for n in all_nums]
 
     return {
-        "date": display_date,
-        "special": db, "g1": g1, "g2": g2, "g3": g3,
-        "g4": g4, "g5": g5, "g6": g6, "g7": g7,
-        "loto": lotos, "source": "Dữ liệu mẫu (chưa có kết quả)"
+        "date": display_date, "special": db, "g1": g1, "g2": g2, "g3": g3,
+        "g4": g4, "g5": g5, "g6": g6, "g7": g7, "loto": lotos, "source": "Dữ liệu mẫu"
     }
 
 def get_xsmb_prediction(target_date_str=None):
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
-        
     parts = target_date_str.split("/")
     if len(parts) != 3:
         return None
-        
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
     random.seed(int(f"{y}{m}{d}") + 999)
-    
-    song_thu = [str(random.randint(0, 99)).zfill(2) for _ in range(2)]
-    bach_thu = str(random.randint(0, 99)).zfill(2)
-    lo_xiu = [str(random.randint(0, 99)).zfill(2) for _ in range(4)]
-    
     return {
         "date": f"{d}/{m}/{y}",
-        "bach_thu": bach_thu,
-        "song_thu": song_thu,
-        "lo_xiu": lo_xiu
+        "bach_thu": str(random.randint(0, 99)).zfill(2),
+        "song_thu": [str(random.randint(0, 99)).zfill(2) for _ in range(2)],
+        "lo_xiu": [str(random.randint(0, 99)).zfill(2) for _ in range(4)]
     }
