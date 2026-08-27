@@ -1,8 +1,7 @@
 import json
 import os
 from datetime import datetime
-
-DATA_FILE = "xsmb_data.json"
+from config import DATA_FILE
 
 def init_data_file():
     if not os.path.exists(DATA_FILE):
@@ -14,16 +13,12 @@ def save_result(result):
     date_key = result.get("date")
     if not date_key:
         return False
-    
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
     data[date_key] = result
-    
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    print(f"💾 Đã lưu dữ liệu: {date_key}")
+    print(f"💾 Đã lưu: {date_key}")
     return True
 
 def get_saved_result(date_str):
