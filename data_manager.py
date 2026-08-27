@@ -1,8 +1,7 @@
 import json
 import os
 from datetime import datetime
-
-DATA_FILE = "xsmb_data.json"
+from config import DATA_FILE
 
 def load_all_data():
     if not os.path.exists(DATA_FILE):
@@ -41,4 +40,3 @@ def get_saved_result(date_str):
 def get_all_dates():
     data = load_all_data()
     return [item["date"] for item in data["history"]]
-
