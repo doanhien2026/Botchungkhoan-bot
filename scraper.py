@@ -1,6 +1,5 @@
 import requests
 import re
-from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -12,6 +11,22 @@ HEADERS = {
 def get_now_vn():
     return datetime.now(VN_TZ)
 
+# ==============================================
+# ✅ HÀM KIỂM TRA SỐ GIẢ — TẠO 1 LẦN, DÙNG Ở 2 NGUỒN
+# ==============================================
+def is_dummy_number(num_str):
+    """Kiểm tra xem có phải số mặc định/giả không"""
+    if not num_str or len(num_str) != 5:
+        return True
+    # Các số mặc định thường gặp
+    dummy_list = {"99999", "00000", "11111", "12345", "54321", "88888"}
+    if num_str in dummy_list:
+        return True
+    # Kiểm tra số lặp toàn bộ (99999, 11111...)
+    if all(c == num_str[0] for c in num_str):
+        return True
+    return False
+
 # ========== NGUỒN 1: XOSODAIPHAT.COM ==========
 def lay_tu_xosodaiphat(d, m, y):
     try:
@@ -21,6 +36,7 @@ def lay_tu_xosodaiphat(d, m, y):
         if r.status_code != 200 or len(r.text) < 1000:
             return None
         
+        # Lấy tất cả số 5 chữ số
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
         if len(all_5digit) < 5:
             return None
@@ -28,20 +44,20 @@ def lay_tu_xosodaiphat(d, m, y):
         db = all_5digit[0]
         
         # ==============================================
-        # ✅ KIỂM TRA SỐ MẶC ĐỊNH — TRẢ VỀ NONE NẾU CÓ
+        # ✅ KIỂM TRA SỐ GIẢ → NẾU CÓ → TRẢ VỀ NGAY None
         # ==============================================
-        DUMMY_NUMBERS = {"99999", "00000", "11111", "12345", "54321"}
-        if db in DUMMY_NUMBERS:
-            print(f"⚠️ [XOSODAIPHAT] Trang chưa có kết quả thực tế! Đặc biệt = {db} (mặc định)")
+        if is_dummy_number(db):
+            print(f"⚠️ [XOSODAIPHAT] Chưa có kết quả thực tế! Đặc biệt = {db} (số giả/mặc định)")
             return None
         
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if g1 in DUMMY_NUMBERS:
+        if is_dummy_number(g1):
             g1 = ""
         
+        # Lọc số lô — BỎ SỐ GIẢ
         lotos = sorted(set(
             n[-2:] for n in all_5digit
-            if n not in DUMMY_NUMBERS and n[-2:] != '00'
+            if not is_dummy_number(n) and n[-2:] != '00'
         ))
         
         print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
@@ -71,19 +87,18 @@ def lay_tu_xosocomvn(d, m, y):
         
         db = all_5digit[0]
         
-        # ✅ CÙNG KIỂM TRA SỐ MẶC ĐỊNH
-        DUMMY_NUMBERS = {"99999", "00000", "11111", "12345", "54321"}
-        if db in DUMMY_NUMBERS:
-            print(f"⚠️ [XOSO.com.vn] Nguồn chưa có kết quả thực tế! Đặc biệt = {db}")
+        # ✅ CÙNG KIỂM TRA SỐ GIẢ
+        if is_dummy_number(db):
+            print(f"⚠️ [XOSO.com.vn] Chưa có kết quả thực tế! Đặc biệt = {db}")
             return None
         
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if g1 in DUMMY_NUMBERS:
+        if is_dummy_number(g1):
             g1 = ""
         
         lotos = sorted(set(
             n[-2:] for n in all_5digit
-            if n not in DUMMY_NUMBERS and n[-2:] != '00'
+            if not is_dummy_number(n) and n[-2:] != '00'
         ))
         
         print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
