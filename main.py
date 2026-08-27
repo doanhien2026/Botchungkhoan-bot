@@ -102,4 +102,5 @@ if __name__ == '__main__':
     Thread(target=auto_scheduler, daemon=True).start()
     bot.remove_webhook()
     print("✅ Bot sẵn sàng!")
-    bot.infinity_polling(skip_pending_updates=True)
+    # ✅ ĐÃ XÓA skip_pending_updates — KHÔNG CÒN LỖI NỮA!
+    bot.infinity_polling()
