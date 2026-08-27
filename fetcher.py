@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -11,68 +10,77 @@ def get_xsmb_result(target_date_str=None):
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
 
+    # Làm sạch chuỗi ngày
+    target_date_str = target_date_str.strip()
     parts = target_date_str.split("/")
     if len(parts) != 3:
         return None
         
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    formatted_date = f"{d}-{m}-{y}"
-
+    
+    # Sử dụng API JSON trực tiếp không bị Cloudflare chặn
+    url = f"https://api.vnpay.vn/vnpay-kqxs/xsmb?date={d}{m}{y}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "vi-VN,vi;q=0.9"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json"
     }
 
-    # Cào trực tiếp từ XSKT.com.vn (Nguồn thật 100%)
     try:
-        url = f"https://xskt.com.vn/xsmb/ngay-{d}-{m}-{y}"
-        res = requests.get(url, headers=headers, timeout=10)
-        
+        res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
-            table = soup.find("table", id="vtable") or soup.find("table", class_="bkqa")
-            
-            if table:
-                def extract_prize(row_class):
-                    tr = table.find("tr", class_=row_class)
-                    if tr:
-                        tds = tr.find_all("td")
-                        if len(tds) > 1:
-                            nums = tds[1].get_text(separator=" ").split()
-                            return [n.strip() for n in nums if n.strip().isdigit()]
-                    return []
-
-                db_list = extract_prize("gdb")
-                db = db_list[0] if db_list else ""
+            data_json = res.json()
+            # Bóc tách dữ liệu JSON
+            if data_json.get("code") == "00" or "data" in data_json:
+                data = data_json.get("data", {})
+                db = str(data.get("gdb") or "").strip()
+                g1 = str(data.get("g1") or "").strip()
                 
-                g1_list = extract_prize("g1")
-                g1 = g1_list[0] if g1_list else ""
-
-                g2 = extract_prize("g2")
-                g3 = extract_prize("g3")
-                g4 = extract_prize("g4")
-                g5 = extract_prize("g5")
-                g6 = extract_prize("g6")
-                g7 = extract_prize("g7")
-
                 if db or g1:
-                    all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
-                    lotos = [n[-2:] for n in all_prizes if len(n) >= 2]
-                    
+                    g2 = [str(x) for x in data.get("g2", [])]
+                    g3 = [str(x) for x in data.get("g3", [])]
+                    g4 = [str(x) for x in data.get("g4", [])]
+                    g5 = [str(x) for x in data.get("g5", [])]
+                    g6 = [str(x) for x in data.get("g6", [])]
+                    g7 = [str(x) for x in data.get("g7", [])]
+
+                    all_nums = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
+                    lotos = [n[-2:] for n in all_nums if len(n) >= 2]
+
                     return {
                         "date": f"{d}/{m}/{y}",
-                        "special": db,
-                        "g1": g1,
-                        "g2": g2,
-                        "g3": g3,
-                        "g4": g4,
-                        "g5": g5,
-                        "g6": g6,
-                        "g7": g7,
-                        "loto": lotos,
-                        "source": "XSKT.com.vn"
+                        "special": db, "g1": g1, "g2": g2, "g3": g3,
+                        "g4": g4, "g5": g5, "g6": g6, "g7": g7,
+                        "loto": lotos, "source": "VNPAY"
                     }
     except Exception as e:
-        print(f"⚠️ Lỗi cào dữ liệu XSKT: {e}")
+        print(f"⚠️ Lỗi API 1: {e}")
+
+    # Nguồn dự phòng 2: API KQXS
+    try:
+        url2 = f"https://xosothantai.mobi/api/v1/lottery/result/xsmb?date={d}-{m}-{y}"
+        res2 = requests.get(url2, headers=headers, timeout=8)
+        if res2.status_code == 200:
+            data2 = res2.json().get("data", {})
+            if isinstance(data2, dict) and (data2.get("special") or data2.get("gdb")):
+                db = str(data2.get("special") or data2.get("gdb") or "").strip()
+                g1 = str(data2.get("first") or data2.get("g1") or "").strip()
+                g2 = [str(x) for x in (data2.get("second") or data2.get("g2") or [])]
+                g3 = [str(x) for x in (data2.get("third") or data2.get("g3") or [])]
+                g4 = [str(x) for x in (data2.get("fourth") or data2.get("g4") or [])]
+                g5 = [str(x) for x in (data2.get("fifth") or data2.get("g5") or [])]
+                g6 = [str(x) for x in (data2.get("sixth") or data2.get("g6") or [])]
+                g7 = [str(x) for x in (data2.get("seventh") or data2.get("g7") or [])]
+
+                all_nums = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
+                lotos = [n[-2:] for n in all_nums if len(n) >= 2]
+
+                return {
+                    "date": f"{d}/{m}/{y}",
+                    "special": db, "g1": g1, "g2": g2, "g3": g3,
+                    "g4": g4, "g5": g5, "g6": g6, "g7": g7,
+                    "loto": lotos, "source": "XoSoThanTai"
+                }
+    except Exception as e:
+        print(f"⚠️ Lỗi API 2: {e}")
 
     return None
