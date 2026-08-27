@@ -17,126 +17,103 @@ def get_xsmb_result(target_date_str=None):
         return None
         
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    date_api = f"{d}{m}{y}"
     display_date = f"{d}/{m}/{y}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "vi-VN,vi;q=0.9",
-        "Referer": "https://kqxs.vn/"
+        "Accept-Language": "vi-VN,vi;q=0.9"
     }
 
     # ==========================================
-    # NGUỒN CHÍNH: KQXS.VN — CẢI THIỆN PHÂN TÍCH
+    # NGUỒN CHÍNH: KETQUA.NET — DỄ PARSE NHẤT
     # ==========================================
     try:
-        url = f"https://kqxs.vn/xsmb/{y}-{m}-{d}"
-        print(f"🔍 Đang lấy dữ liệu từ: {url}")
+        url = f"https://ketqua.net/xsmb/ngay/{d}-{m}-{y}"
+        print(f"🔍 [KETQUA.net] Đang lấy: {url}")
         r = requests.get(url, headers=headers, timeout=20)
         
-        if r.status_code == 200 and len(r.text) > 1000:
+        if r.status_code == 200 and len(r.text) > 500:
             html = r.text
             
-            # Lấy Đặc Biệt — cải thiện regex
-            db_patterns = [
-                r'Giải Đặc biệt.*?<div[^>]*class="[^"]*result[^"]*"[^>]*>(\d{5,6})</div>',
-                r'Đặc biệt.*?(\d{5,6})',
-                r'class="special[^>]*>(\d{5,6})'
-            ]
-            db = None
-            for pat in db_patterns:
-                m = re.search(pat, html, re.DOTALL)
-                if m:
-                    db = m.group(1)
-                    break
+            # Đặc biệt
+            db_match = re.search(r'id="rs_0_0".*?>(\d{5})<', html)
+            # Giải nhất
+            g1_match = re.search(r'id="rs_1_0".*?>(\d{5})<', html)
+            # Giải nhì
+            g2_matches = re.findall(r'id="rs_2_\d".*?>(\d{5})<', html)
+            # Giải ba
+            g3_matches = re.findall(r'id="rs_3_\d".*?>(\d{5})<', html)
+            # Giải tư
+            g4_matches = re.findall(r'id="rs_4_\d".*?>(\d{4})<', html)
+            # Giải năm
+            g5_matches = re.findall(r'id="rs_5_\d".*?>(\d{4})<', html)
+            # Giải sáu
+            g6_matches = re.findall(r'id="rs_6_\d".*?>(\d{3})<', html)
+            # Giải bảy
+            g7_matches = re.findall(r'id="rs_7_\d".*?>(\d{2})<', html)
             
-            # Lấy Giải Nhất
-            g1_patterns = [
-                r'Giải nhất.*?(\d{5})',
-                r'class="prize-1[^>]*>(\d{5})'
-            ]
-            g1 = None
-            for pat in g1_patterns:
-                m = re.search(pat, html, re.DOTALL)
-                if m:
-                    g1 = m.group(1)
-                    break
-            
-            # Lấy tất cả số 2 chữ số (loto)
-            lotos = re.findall(r'>(\d{2})<', html)
-            lotos = [n for n in lotos if n.isdigit() and n != '00' and len(n) == 2]
-            lotos = list(set(lotos))  # Loại bỏ trùng lặp
-            
-            if db and g1 and len(lotos) >= 15:
-                print(f"✅ [KQXS.vn] {display_date} | ĐB: {db} | G1: {g1} | Lô: {len(lotos)} số")
+            if db_match and g1_match:
+                db = db_match.group(1)
+                g1 = g1_match.group(1)
+                
+                # Tính LÔ: lấy 2 số cuối của TẤT CẢ các giải
+                all_prizes = [db, g1] + g2_matches + g3_matches + g4_matches
+                all_prizes += g5_matches + g6_matches + g7_matches
+                lotos = [p[-2:] for p in all_prizes if len(p) >= 2]
+                lotos = sorted(list(set(lotos)))  # Loại trùng
+                
+                print(f"✅ [KETQUA.net] {display_date} | ĐB: {db} | Lô: {len(lotos)} số")
                 return {
                     "date": display_date,
                     "special": db,
                     "g1": g1,
+                    "g2": g2_matches,
+                    "g3": g3_matches,
+                    "g4": g4_matches,
+                    "g5": g5_matches,
+                    "g6": g6_matches,
+                    "g7": g7_matches,
                     "loto": lotos,
-                    "source": "KQXS.vn"
+                    "source": "KETQUA.net"
                 }
-            else:
-                print(f"⚠️ KQXS.vn thiếu dữ liệu — ĐB:{db}, G1:{g1}, Lô:{len(lotos)}")
     except Exception as e:
-        print(f"❌ [KQXS.vn] Lỗi: {str(e)[:60]}")
+        print(f"❌ [KETQUA.net] Lỗi: {str(e)[:60]}")
 
     # ==========================================
-    # NGUỒN DỰ PHÒNG 2: XOSO.COM.VN
+    # NGUỒN 2: XOSO.WAP.VN
     # ==========================================
     try:
-        url = f"https://xoso.com.vn/xsmb-{d}/{m}/{y}.html"
-        print(f"🔍 Thử nguồn 2: {url}")
+        url = f"https://xoso.wap.vn/xsmb/{y}/{m}/{d}"
+        print(f"🔍 [Xoso.wap.vn] Đang lấy: {url}")
         r = requests.get(url, headers=headers, timeout=20)
         
-        if r.status_code == 200 and len(r.text) > 500:
+        if r.status_code == 200 and len(r.text) > 300:
             html = r.text
             db_match = re.search(r'Đặc biệt.*?(\d{5})', html, re.DOTALL)
             g1_match = re.search(r'Giải nhất.*?(\d{5})', html, re.DOTALL)
             if db_match and g1_match:
                 db = db_match.group(1)
                 g1 = g1_match.group(1)
-                lotos = re.findall(r'>(\d{2})<', html)
-                lotos = list(set([n for n in lotos if n.isdigit() and n != '00' and len(n) == 2]))
-                if len(lotos) >= 10:
-                    print(f"✅ [Xoso.com.vn] {display_date} | ĐB: {db}")
+                # Lấy lô từ các giải
+                all_nums = re.findall(r'(\d{5})|(\d{4})|(\d{3})|(\d{2})', html)
+                all_nums = [''.join(g) for g in all_nums if any(g)]
+                lotos = [n[-2:] for n in all_nums if len(n) >= 2 and n.isdigit()]
+                lotos = [n for n in lotos if n != '00']
+                lotos = sorted(list(set(lotos)))
+                if len(lotos) >= 20:
+                    print(f"✅ [Xoso.wap.vn] {display_date} | ĐB: {db} | Lô: {len(lotos)} số")
                     return {
                         "date": display_date, "special": db, "g1": g1,
-                        "loto": lotos, "source": "Xoso.com.vn"
+                        "loto": lotos, "source": "Xoso.wap.vn"
                     }
-    except Exception as e:
-        print(f"❌ [Xoso.com.vn] Lỗi: {str(e)[:60]}")
-
-    # ==========================================
-    # NGUỒN DỰ PHÒNG 3: XOSO.WAP.VN
-    # ==========================================
-    try:
-        url = f"https://xoso.wap.vn/xsmb/{y}/{m}/{d}"
-        print(f"🔍 Thử nguồn 3: {url}")
-        r = requests.get(url, headers=headers, timeout=20)
-        
-        if r.status_code == 200 and len(r.text) > 300:
-            html = r.text
-            db_match = re.search(r'Đặc biệt.*?(\d{5,6})', html, re.DOTALL)
-            g1_match = re.search(r'Giải nhất.*?(\d{5})', html, re.DOTALL)
-            if db_match:
-                db = db_match.group(1)
-                g1 = g1_match.group(1) if g1_match else "-----"
-                lotos = re.findall(r'>(\d{2})<', html)
-                lotos = list(set([n for n in lotos if n.isdigit() and n != '00' and len(n) == 2]))
-                print(f"✅ [Xoso.wap.vn] {display_date} | ĐB: {db}")
-                return {
-                    "date": display_date, "special": db, "g1": g1,
-                    "loto": lotos, "source": "Xoso.wap.vn"
-                }
     except Exception as e:
         print(f"❌ [Xoso.wap.vn] Lỗi: {str(e)[:60]}")
 
     # ==========================================
-    # TẤT CẢ NGUỒN LỖI → TRẢ LỖI THÔNG BÁO LỖI
+    # TẤT CẢ NGUỒN LỖI → TRẢ None
     # ==========================================
-    print(f"❌ TẤT CẢ NGUỒN ĐỀU KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {display_date}")
-    return None  # Trả về None thay vì dữ liệu giả → biết rõ là lỗi
+    print(f"❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {display_date}")
+    return None
 
 # === DỰ BÁO ===
 def get_xsmb_prediction(target_date_str=None):
