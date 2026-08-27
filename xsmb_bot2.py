@@ -1,7 +1,6 @@
 # ============================================================
-# 🤖 BOT XSMB — HOÀN CHỈNH V7.1
-# ✅ Tự lưu dữ liệu | ✅ GỬI NGAY khi chạy | ✅ Không cần 10 ngày
-# ✅ Đã điền sẵn TOKEN & CHAT_ID — KHÔNG CẦN SỬA GÌ
+# 🤖 BOT XSMB — HOÀN CHỈNH V7.2
+# ✅ Sửa lỗi KeyError | ✅ Gửi NGAY khi chạy | ✅ Tự lưu dữ liệu
 # ============================================================
 import os
 import json
@@ -17,7 +16,7 @@ from flask import Flask
 TELEGRAM_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
 CHAT_ID = "1030583610"
 DATA_FILE = "xsmb_data.json"
-CHECK_INTERVAL = 3600  # Kiểm tra mỗi 1 giờ (giây)
+CHECK_INTERVAL = 3600  # Kiểm tra mỗi 1 giờ
 # ============================================================================
 
 app = Flask(__name__)
@@ -25,20 +24,27 @@ app = Flask(__name__)
 # ========== WEB SERVER ==========
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V7.1 — Đang hoạt động & Lưu dữ liệu tự động", 200
+    return "✅ Bot XSMB V7.2 — Đang hoạt động", 200
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, use_reloader=False)
 
-# ========== QUẢN LÝ DỮ LIỆU — TỰ ĐỌC/TẠO/LƯU ==========
+# ========== ✅ ĐÃ SỬA LỖI KeyError — ĐẢM BẢO CÓ ĐỦ KHÓA ==========
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # Tự thêm khóa nếu thiếu — KHÔNG BAO GIỜ BỊ LỖI
+                if "history" not in data:
+                    data["history"] = []
+                if "last_date" not in data:
+                    data["last_date"] = ""
+                return data
         except Exception as e:
             print(f"⚠️ File dữ liệu lỗi, tạo mới: {e}")
+    # Trả về cấu trúc ĐÚNG & ĐẦY ĐỦ
     return {"history": [], "last_date": ""}
 
 def save_data(data):
@@ -48,7 +54,7 @@ def save_data(data):
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        print(f"❌ Lỗi lưu dữ liệu: {e}")
+        print(f"❌ Lỗi lưu: {e}")
         return False
 
 # ========== LẤY KẾT QUẢ XSMB ==========
@@ -79,7 +85,7 @@ def get_xsmb_result():
         print(f"❌ Lỗi lấy dữ liệu: {e}")
         return None
 
-# ========== PHÂN TÍCH — BỎ ĐIỀU KIỆN 10 NGÀY ==========
+# ========== PHÂN TÍCH — KHÔNG CẦU 10 NGÀY ==========
 def analyze(history):
     if len(history) < 1:
         return None
@@ -118,7 +124,7 @@ def send_tg(text):
         print(f"❌ Lỗi gửi Telegram: {e}")
         return False
 
-# ========== TẠO BÁO CÁO ==========
+# ========== BÁO CÁO ĐẸP ==========
 def build_report(result, pred):
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     return f"""
@@ -138,7 +144,7 @@ def build_report(result, pred):
 🔢 *ĐẦU LÔ NÓI* → {pred['dau']['num']} — {pred['dau']['rate']}
 🔢 *ĐUÔI LÔ NÓI* → {pred['duoi']['num']} — {pred['duoi']['rate']}
 
-🎲 *SỐ CUỐI ĐẶC BIỆT VỪA RA*: {pred['duoi_db']}
+🎲 *SỐ CUỐI ĐẶC BIỆT*: {pred['duoi_db']}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*
@@ -146,11 +152,13 @@ def build_report(result, pred):
 
 # ========== CHƯƠNG TRÌNH CHÍNH ==========
 def main():
-    print("🚀 Bot XSMB V7.1 khởi động...")
+    print("🚀 Bot XSMB V7.2 khởi động...")
 
+    # Tải dữ liệu — ĐÃ SỬA LỖI KeyError
     data = load_data()
     print(f"📂 Đã có {len(data['history'])} ngày dữ liệu")
 
+    # Khởi động server
     threading.Thread(target=run_server, daemon=True).start()
     time.sleep(2)
     print("✅ Server đã chạy")
@@ -160,14 +168,16 @@ def main():
     result = get_xsmb_result()
 
     if result:
+        # Lưu nếu ngày mới
         if data["last_date"] != result["date"]:
             data["history"].append(result)
             data["last_date"] = result["date"]
             if len(data["history"]) > 90:
                 data["history"] = data["history"][-90:]
             save_data(data)
-            print(f"✅ Đã lưu dữ liệu: {result['date']}")
+            print(f"✅ Đã lưu: {result['date']}")
 
+        # Tạo dự báo & gửi
         pred = analyze(data["history"])
         if pred:
             if send_tg(build_report(result, pred)):
@@ -175,11 +185,11 @@ def main():
             else:
                 print("❌ Gửi thất bại — kiểm tra TOKEN & CHAT_ID")
         else:
-            print("⚠️ Chưa đủ dữ liệu để phân tích")
+            print("⚠️ Chưa đủ dữ liệu")
     else:
         print("❌ Không lấy được kết quả XSMB")
 
-    # 🔄 Vòng lặp cập nhật hàng ngày
+    # 🔄 Vòng lặp hàng ngày
     last_check_date = datetime.now().strftime("%d/%m/%Y")
     while True:
         time.sleep(CHECK_INTERVAL)
