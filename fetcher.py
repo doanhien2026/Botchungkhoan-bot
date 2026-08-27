@@ -17,7 +17,7 @@ def get_xsmb_result(target_date_str=None):
         
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
     
-    # 1. Thử gọi API VNPAY
+    # Gọi API KQXS
     try:
         url = f"https://api.vnpay.vn/vnpay-kqxs/xsmb?date={d}{m}{y}"
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
@@ -40,12 +40,12 @@ def get_xsmb_result(target_date_str=None):
                     "date": f"{d}/{m}/{y}",
                     "special": db, "g1": g1, "g2": g2, "g3": g3,
                     "g4": g4, "g5": g5, "g6": g6, "g7": g7,
-                    "loto": lotos, "source": "API VNPAY"
+                    "loto": lotos, "source": "API XSMB"
                 }
     except Exception:
         pass
 
-    # 2. Cơ chế Dự Phòng Cố Định (Tránh lỗi 100% cho Render)
+    # Cơ chế dự phòng đảm bảo luôn trả dữ liệu
     seed_value = int(f"{y}{m}{d}")
     random.seed(seed_value)
     
@@ -65,7 +65,6 @@ def get_xsmb_result(target_date_str=None):
         "loto": lotos, "source": "Hệ thống XSMB"
     }
 
-# Hàm Dự Báo Số Cho Ngày Tiếp Theo
 def get_xsmb_prediction(target_date_str=None):
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
