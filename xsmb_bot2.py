@@ -120,11 +120,11 @@ def auto_scheduler():
 # ========== KHỞI ĐỘNG — SỬA LỖI 409 TRIỆT ĐỂ ==========
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — HOÀN CHỈNH | SỬA LỖI 409 + BỎ SỐ GIẢ")
+    print("🚀 BOT XSMB — SỬA LỖI 409 | CHỈ 1 LUỒNG")
     print("📡 Nguồn: XOSODAIPHAT + XOSO.com.vn")
     print("="*60)
     
-    # === QUAN TRỌNG: XÓA WEBHOOK & DỪNG KẾT NỐI CŨ ===
+    # === QUAN TRỌNG 1: XÓA WEBHOOK CŨ ===
     bot.remove_webhook()
     print("🔄 Đã xóa webhook cũ — tránh xung đột kết nối")
     
@@ -136,17 +136,17 @@ if __name__ == "__main__":
     Thread(target=auto_scheduler, daemon=True).start()
     print("⏰ Lịch trình tự động 18:35 đã bật")
     
-    print("✅ Bot sẵn sàng! CHỈ 1 LUỒNG — KHÔNG LỖI 409")
+    print("✅ Bot sẵn sàng — CHỈ 1 LUỒNG LẮNG NGHE")
     print("="*60)
     
-    # === ✅ TẮT ĐA LUỒNG = threaded=False → KHÔNG CÒN LỖI 409 ===
+    # === ✅ QUAN TRỌNG 2: TẮT ĐA LUỒNG = threaded=False → KHÔNG LỖI 409 ===
     while True:
         try:
             bot.infinity_polling(
                 timeout=60,
                 long_polling_timeout=60,
                 allowed_updates=['message', 'callback_query'],
-                threaded=False  # ← QUAN TRỌNG NHẤT: TẮT ĐA LUỒNG
+                threaded=False  # ← BẮT BUỘC PHẢI CÓ DÒNG NÀY — TẮT ĐA LUỒNG
             )
         except Exception as e:
             print(f"⚠️ Lỗi kết nối: {e}")
