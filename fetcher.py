@@ -1,5 +1,5 @@
 import requests
-import random
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -16,60 +16,63 @@ def get_xsmb_result(target_date_str=None):
         return None
         
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    formatted_date_dash = f"{d}-{m}-{y}"
+    formatted_date = f"{d}-{m}-{y}"
 
-    # 1. Thử gọi API xổ số chính thức
-    try:
-        url = f"https://api-xsmb.vercel.app/api/v1/xsmb?date={formatted_date_dash}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            if "special" in data and data["special"]:
-                return {
-                    "date": target_date_str,
-                    "special": str(data.get("special", "")),
-                    "g1": str(data.get("g1", "")),
-                    "g2": [str(x) for x in data.get("g2", [])],
-                    "g3": [str(x) for x in data.get("g3", [])],
-                    "g4": [str(x) for x in data.get("g4", [])],
-                    "g5": [str(x) for x in data.get("g5", [])],
-                    "g6": [str(x) for x in data.get("g6", [])],
-                    "g7": [str(x) for x in data.get("g7", [])],
-                    "loto": [str(x)[-2:] for x in data.get("all_nums", []) if len(str(x)) >= 2],
-                    "source": "Hệ thống XSMB"
-                }
-    except Exception as e:
-        print(f"⚠️ API lỗi: {e}")
-
-    # 2. Bộ dự phòng tự động trả dữ liệu chuẩn cấu trúc (Đảm bảo Bot luôn phản hồi)
-    # Tạo ngẫu nhiên bộ số kết quả đúng chuẩn XSMB cho ngày tra cứu
-    random.seed(f"{d}{m}{y}") # Đảm bảo cùng 1 ngày luôn ra cùng 1 kết quả cố định
-    
-    gen_num = lambda length: str(random.randint(0, 10**length - 1)).zfill(length)
-    
-    db = gen_num(5)
-    g1 = gen_num(5)
-    g2 = [gen_num(5) for _ in range(2)]
-    g3 = [gen_num(5) for _ in range(6)]
-    g4 = [gen_num(4) for _ in range(4)]
-    g5 = [gen_num(4) for _ in range(6)]
-    g6 = [gen_num(3) for _ in range(3)]
-    g7 = [gen_num(2) for _ in range(4)]
-    
-    all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
-    lotos = [n[-2:] for n in all_prizes]
-
-    return {
-        "date": target_date_str,
-        "special": db,
-        "g1": g1,
-        "g2": g2,
-        "g3": g3,
-        "g4": g4,
-        "g5": g5,
-        "g6": g6,
-        "g7": g7,
-        "loto": lotos,
-        "source": "Máy chủ XSMB"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "vi-VN,vi;q=0.9"
     }
+
+    # Cào trực tiếp từ XSKT.com.vn (Nguồn thật 100%)
+    try:
+        url = f"https://xskt.com.vn/xsmb/ngay-{d}-{m}-{y}"
+        res = requests.get(url, headers=headers, timeout=10)
+        
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            table = soup.find("table", id="vtable") or soup.find("table", class_="bkqa")
+            
+            if table:
+                def extract_prize(row_class):
+                    tr = table.find("tr", class_=row_class)
+                    if tr:
+                        tds = tr.find_all("td")
+                        if len(tds) > 1:
+                            nums = tds[1].get_text(separator=" ").split()
+                            return [n.strip() for n in nums if n.strip().isdigit()]
+                    return []
+
+                db_list = extract_prize("gdb")
+                db = db_list[0] if db_list else ""
+                
+                g1_list = extract_prize("g1")
+                g1 = g1_list[0] if g1_list else ""
+
+                g2 = extract_prize("g2")
+                g3 = extract_prize("g3")
+                g4 = extract_prize("g4")
+                g5 = extract_prize("g5")
+                g6 = extract_prize("g6")
+                g7 = extract_prize("g7")
+
+                if db or g1:
+                    all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
+                    lotos = [n[-2:] for n in all_prizes if len(n) >= 2]
+                    
+                    return {
+                        "date": f"{d}/{m}/{y}",
+                        "special": db,
+                        "g1": g1,
+                        "g2": g2,
+                        "g3": g3,
+                        "g4": g4,
+                        "g5": g5,
+                        "g6": g6,
+                        "g7": g7,
+                        "loto": lotos,
+                        "source": "XSKT.com.vn"
+                    }
+    except Exception as e:
+        print(f"⚠️ Lỗi cào dữ liệu XSKT: {e}")
+
+    return None
