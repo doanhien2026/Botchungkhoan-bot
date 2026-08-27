@@ -8,45 +8,58 @@ from config import TELEGRAM_TOKEN, CHAT_ID, PORT
 from fetcher import get_xsmb_result, get_now_vn
 from data_manager import get_all_dates
 
+# === KHỞI TẠO ===
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
+# === FLASK ROUTE ===
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V7.2 — Đang hoạt động & Lưu dữ liệu tự động", 200
+    return "✅ Bot XSMB V7.3 — Lấy dữ liệu thực từ KETQUA.net | Không tạo số giả", 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
 
+# === LỆNH /START ===
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     user_id = message.chat.id
     print(f"📩 /start từ {user_id}")
-    if str(user_id) != str(CHAT_ID) and str(user_id) != str(CHAT_ID).replace('-100', ''):
+    
+    # Kiểm tra quyền
+    allowed_ids = [str(CHAT_ID), str(CHAT_ID).replace('-100', '')]
+    if str(user_id) not in allowed_ids:
         bot.send_message(user_id, "❌ Bạn không có quyền sử dụng bot này.")
         return
+    
     bot.send_message(user_id,
-        "🤖 Bot XSMB — Lấy kết quả thực từ KETQUA.net & XOSO.COM.VN\n\n"
-        "📌 Gõ ngày theo định dạng: DDMMYYYY\n"
-        "Ví dụ: 22082026\n\n"
+        "🤖 **BOT XSMB — LẤY KẾT QUẢ THỰC**\n"
+        "📡 Nguồn: KETQUA.net (chính thức)\n"
         "✅ Không tạo số giả — chỉ trả kết quả thực!\n"
-        "✅ Tự động lưu dữ liệu vào file JSON"
+        "💾 Tự động lưu dữ liệu lịch sử\n\n"
+        "📌 Gõ ngày: **DDMMYYYY**\n"
+        "Ví dụ: 26082026\n\n"
+        "⏰ Tự động gửi kết quả mỗi ngày 18:35"
     )
 
+# === XỬ LÝ TIN NHẮN ===
 @bot.message_handler(func=lambda msg: True)
 def handle_message(message):
     user_id = message.chat.id
     text = message.text.strip()
-    print(f"📩 Nhận tin từ {user_id}: {text}")
+    print(f"📩 [{user_id}] Nhận: {text}")
     
-    if str(user_id) != str(CHAT_ID) and str(user_id) != str(CHAT_ID).replace('-100', ''):
+    # Kiểm tra quyền
+    allowed_ids = [str(CHAT_ID), str(CHAT_ID).replace('-100', '')]
+    if str(user_id) not in allowed_ids:
         return
     
+    # Kiểm tra định dạng ngày DDMMYYYY
     if not re.match(r"^\d{8}$", text):
         bot.send_message(user_id,
-            "⚠️ Định dạng không đúng!\n"
-            "Vui lòng gõ ngày theo định dạng: DDMMYYYY\n"
-            "Ví dụ: 22082026"
+            "⚠️ **Định dạng không đúng!**\n"
+            "Vui lòng gõ ngày theo định dạng: **DDMMYYYY**\n"
+            "Ví dụ: 26082026"
         )
         return
     
@@ -56,69 +69,99 @@ def handle_message(message):
         y = text[4:8]
         date_str = f"{d}/{m}/{y}"
         
-        bot.send_message(user_id, f"🔍 Đang lấy dữ liệu ngày {date_str}...")
+        # Kiểm tra ngày hợp lệ
+        datetime(int(y), int(m), int(d))
         
+        bot.send_message(user_id, f"🔍 Đang lấy dữ liệu ngày **{date_str}** từ KETQUA.net...")
+        
+        # === LẤY KẾT QUẢ THỰC ===
         result = get_xsmb_result(date_str)
         
         if not result:
             bot.send_message(user_id,
-                f"⚠️ KHÔNG CÓ DỮ LIỆU NGÀY {date_str}\n\n"
-                "→ Kết quả có thể chưa cập nhật (trước 18:30)\n"
-                "→ Hoặc ngày không hợp lệ\n"
+                f"⚠️ **KHÔNG CÓ DỮ LIỆU NGÀY {date_str}**\n\n"
+                "→ Kết quả có thể **chưa cập nhật** (trước 18:35)\n"
+                "→ Hoặc ngày không tồn tại\n"
                 "→ Hoặc nguồn dữ liệu tạm thời không truy cập được\n\n"
-                "❌ Bot KHÔNG tạo số giả — vui lòng thử lại sau!"
+                "❌ **Bot KHÔNG tạo số giả** — vui lòng thử lại sau 18:35!"
             )
             return
         
-        special = result.get("special", "Không có")
-        g1 = result.get("g1", "Không có")
+        # === CÓ DỮ LIỆU THỰC → HIỂN THỊ ===
+        special = result.get("special", "")
+        g1 = result.get("g1", "")
         loto = result.get("loto", [])
-        source = result.get("source", "Không rõ")
+        source = result.get("source", "KETQUA.net")
         
         reply = (
-            f"📅 NGÀY: {date_str}\n"
+            f"📅 **KẾT QUẢ XSMB — {date_str}**\n"
             f"📊 Nguồn: {source}\n"
-            f"💾 Đã lưu vào file dữ liệu\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🏆 Đặc Biệt: {special}\n"
-            f"🥈 Giải Nhất: {g1}\n"
-            f"🎯 Lô về ({len(loto)} số):\n"
+            f"💾 Đã lưu vào dữ liệu\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 **Giải Đặc Biệt:** `{special}`\n"
+            f"🥈 **Giải Nhất:** `{g1}`\n"
+            f"🎯 **Lô về ({len(loto)} số):**\n"
         )
+        
         if loto:
-            reply += ", ".join(loto)
+            reply += f"`{', '.join(loto)}`"
         else:
             reply += "Không có dữ liệu lô."
         
-        bot.send_message(user_id, reply)
-        print(f"✅ Đã gửi kết quả: {date_str} | ĐB: {special}")
+        reply += "\n\n⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*"
         
+        bot.send_message(user_id, reply, parse_mode="Markdown")
+        print(f"✅ Đã gửi kết quả: {date_str} | ĐB: {special} | Lô: {len(loto)} số")
+        
+    except ValueError:
+        bot.send_message(user_id, "❌ Ngày không hợp lệ! Vui lòng kiểm tra lại.")
     except Exception as e:
         print(f"❌ Lỗi xử lý: {str(e)}")
-        bot.send_message(user_id, "❌ Lỗi xử lý. Vui lòng kiểm tra định dạng DDMMYYYY.")
+        bot.send_message(user_id, "❌ Lỗi xử lý. Vui lòng thử lại sau.")
 
+# === TỰ ĐỘNG GỬI KẾT QUẢ MỖI NGÀY 18:35 ===
 def auto_scheduler():
-    last_send = None
+    last_date_sent = ""
+    print("⏰ Lịch trình tự động đã bật — Gửi kết quả lúc 18:35 hàng ngày")
+    
     while True:
         try:
             now = get_now_vn()
-            today = now.strftime("%d/%m/%Y")
-            if now.hour == 18 and now.minute >= 35 and last_send != today:
-                result = get_xsmb_result(today)
+            today_str = now.strftime("%d/%m/%Y")
+            
+            # Gửi vào 18:35 mỗi ngày, chỉ gửi 1 lần/ngày
+            if now.hour == 18 and 35 <= now.minute <= 45 and last_date_sent != today_str:
+                print(f"⏰ Đến giờ tự động gửi kết quả ngày {today_str}")
+                
+                result = get_xsmb_result(today_str)
                 if result:
-                    reply = f"📊 KẾT QUẢ TỰ ĐỘNG NGÀY {today}\n"
-                    reply += f"🏆 ĐB: {result['special']} | 🥈 G1: {result['g1']}\n"
-                    reply += f"🎯 Lô: {', '.join(result['loto'])}"
-                    bot.send_message(CHAT_ID, reply)
-                last_send = today
-            time.sleep(60)
+                    reply = (
+                        f"📢 **KẾT QUẢ TỰ ĐỘNG — {today_str}**\n"
+                        f"🏆 Đặc Biệt: `{result['special']}`\n"
+                        f"🥈 Giải Nhất: `{result['g1']}`\n"
+                        f"🎯 Lô về ({len(result['loto'])} số): `{', '.join(result['loto'])}`\n\n"
+                        "⚠️ Chỉ tham khảo — Chơi có trách nhiệm!"
+                    )
+                    bot.send_message(CHAT_ID, reply, parse_mode="Markdown")
+                    last_date_sent = today_str
+                    print(f"✅ Đã gửi tự động: {today_str}")
+                else:
+                    print(f"⚠️ Chưa có dữ liệu ngày {today_str} — bỏ qua gửi tự động")
+            
+            time.sleep(30)  # Kiểm tra mỗi 30 giây
+            
         except Exception as e:
             print(f"❌ Lỗi lịch trình: {e}")
             time.sleep(60)
 
 # === KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG ===
 if __name__ == '__main__':
-    print("🚀 Bot XSMB V7.2 khởi động...")
-    print(f"📂 Đã có {len(get_all_dates())} ngày dữ liệu")
+    print("=" * 60)
+    print("🚀 BOT XSMB — PHIÊN BẢN V7.3")
+    print("📡 Nguồn dữ liệu: KETQUA.net")
+    print("✅ Tính năng: Không tạo số giả | Lưu lịch sử | Tự động gửi 18:35")
+    print("=" * 60)
+    print(f"📂 Đã có {len(get_all_dates())} ngày dữ liệu trong kho")
     
     # Khởi động Flask
     Thread(target=run_flask, daemon=True).start()
@@ -126,10 +169,11 @@ if __name__ == '__main__':
     # Khởi động lịch trình tự động
     Thread(target=auto_scheduler, daemon=True).start()
     
-    # Xóa webhook cũ
+    # Xóa webhook cũ — tránh xung đột
     bot.remove_webhook()
     
-    print("✅ Bot sẵn sàng! Đang lắng nghe tin nhắn Telegram...")
+    print("✅ Bot đã sẵn sàng! Đang lắng nghe tin nhắn Telegram...")
+    print("=" * 60)
     
-    # === QUAN TRỌNG NHẤT: Bắt đầu lắng nghe ===
-    bot.infinity_polling()
+    # === BẮT ĐẦU LẮNG NGHE TELEGRAM — QUAN TRỌNG NHẤT ===
+    bot.infinity_polling(timeout=60)
