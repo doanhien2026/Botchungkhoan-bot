@@ -13,34 +13,35 @@ def get_now_vn():
     return datetime.now(VN_TZ)
 
 # ==========================================
-# NGUỒN CHÍNH: KETQUA.NET — RẤT ỔN ĐỊNH
+# NGUỒN: KETQUA.NET — ĐÚNG URL & SELECTOR
 # ==========================================
 def lay_tu_ketquanet(d, m, y):
     try:
-        url = f"https://ketqua.net/xsmb/ngay/{d}-{m}-{y}"
-        print(f"🔍 [KETQUA.net] Đang truy cập: {url}")
+        # ✅ ĐÚNG định dạng URL của KETQUA.NET
+        url = f"https://ketqua.net/ngay-xsmb-{y}-{m}-{d}"
+        print(f"🔍 [KETQUA.net] Đang lấy: {url}")
         
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200:
-            print(f"⚠️ [KETQUA.net] Mã lỗi: {r.status_code}")
+        if r.status_code != 200 or len(r.text) < 500:
+            print(f"⚠️ [KETQUA.net] Mã lỗi: {r.status_code} hoặc nội dung quá ngắn")
             return None
         
         html = r.text
         
-        # === LẤY ĐẶC BIỆT — ID cố định ===
+        # === LẤY ĐẶC BIỆT — ID cố định trên ketqua.net ===
         db_match = re.search(r'id="rs_0_0"[^>]*>(\d{5})<', html)
         if not db_match:
             # Thử mẫu khác
-            db_match = re.search(r'Kết quả XSMB.*?Đặc biệt.*?(\d{5})', html, re.DOTALL)
+            db_match = re.search(r'Đặc biệt.*?<td[^>]*>(\d{5})</td>', html, re.DOTALL)
         if not db_match:
-            print("❌ [KETQUA.net] Không tìm thấy Đặc Biệt")
+            print("❌ [KETQUA.net] Không tìm thấy Giải Đặc Biệt")
             return None
         db = db_match.group(1)
         
         # === LẤY GIẢI NHẤT ===
         g1_match = re.search(r'id="rs_1_0"[^>]*>(\d{5})<', html)
         if not g1_match:
-            g1_match = re.search(r'Giải nhất.*?(\d{5})', html, re.DOTALL)
+            g1_match = re.search(r'Giải nhất.*?<td[^>]*>(\d{5})</td>', html, re.DOTALL)
         if not g1_match:
             print("❌ [KETQUA.net] Không tìm thấy Giải Nhất")
             return None
@@ -70,12 +71,6 @@ def lay_tu_ketquanet(d, m, y):
             "date": f"{d}/{m}/{y}",
             "special": db,
             "g1": g1,
-            "g2": g2,
-            "g3": g3,
-            "g4": g4,
-            "g5": g5,
-            "g6": g6,
-            "g7": g7,
             "loto": lotos,
             "source": "KETQUA.net"
         }
