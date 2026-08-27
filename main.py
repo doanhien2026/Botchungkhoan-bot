@@ -45,28 +45,21 @@ def analyze(history):
     dau_de_list = []
     
     for day in history:
-        # Thống kê Lô
         all_loto.extend(day.get("loto", []))
-        
-        # Thống kê Đầu số đề (Chữ số đầu tiên của Đuôi 2 số Giải Đặc Biệt)
         sp = str(day.get("special", ""))
         if len(sp) >= 2:
-            dau_de = sp[-2] # Lấy chữ số hàng chục của GĐB
-            dau_de_list.append(dau_de)
+            dau_de_list.append(sp[-2])
 
     if not all_loto: 
         return None
 
     tong_ngay = max(len(history), 1)
-    
-    # Dự đoán Lô
     freq = Counter(all_loto)
     top3 = freq.most_common(3)
     while len(top3) < 3: top3.append(("00", 1))
     top5 = freq.most_common(5)
     xien = top3[1:] + [top5[3]] if len(top5) >= 4 else top3[1:]
 
-    # Dự đoán Đầu số đề xuất hiện nhiều nhất
     top_dau_de = "0"
     if dau_de_list:
         freq_dau = Counter(dau_de_list)
@@ -124,22 +117,9 @@ def handle_user_message(message):
         else:
             bot.reply_to(message, f"❌ Không tìm thấy dữ liệu XSMB cho ngày {target_date}!")
 
-def run_bot_safe():
-    while True:
-        try:
-            bot.remove_webhook()
-            bot.infinity_polling(timeout=10, long_polling_timeout=5)
-        except Exception as e:
-            print(f"⚠️ Lỗi Polling (Tự kết nối lại sau 5s): {e}")
-            time.sleep(5)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_server, daemon=True).start()
-    threading.Thread(target=run_bot_safe, daemon=True).start()
-    
+def auto_send_daily():
     data = load_data()
     last_send_date = None
-
     while True:
         try:
             now_vn = get_now_vn()
@@ -157,3 +137,18 @@ if __name__ == "__main__":
             time.sleep(60)
         except Exception:
             time.sleep(60)
+
+if __name__ == "__main__":
+    # Chạy Web server Flask
+    threading.Thread(target=run_server, daemon=True).start()
+    
+    # Chạy luồng tự động gửi tin nhắn hàng ngày
+    threading.Thread(target=auto_send_daily, daemon=True).start()
+    
+    # Khởi tạo Polling trực tiếp ở luồng chính (không tạo thêm thread dư thừa)
+    try:
+        bot.remove_webhook()
+        time.sleep(2)
+        bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+    except Exception as e:
+        print(f"⚠️ Lỗi Polling: {e}")
