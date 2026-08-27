@@ -1,2 +1,1 @@
-
-web: gunicorn main:app --bind 0.0.0.0:$PORT
+web: python xsmb_bot2.py
