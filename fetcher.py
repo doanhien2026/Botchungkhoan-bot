@@ -1,11 +1,12 @@
 import requests
 import re
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 from data_manager import save_result, get_saved_result
 
 VN_TZ = timezone(timedelta(hours=7))
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
     'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
 }
 
@@ -13,132 +14,115 @@ def get_now_vn():
     return datetime.now(VN_TZ)
 
 # ==========================================
-# NGUỒN 1: DÙNG API KETQUA365 — NHANH & ỔN ĐỊNH NHẤT
+# NGUỒN 1: XOSODAIPHAT.COM — NGUỒN CHÍNH
 # ==========================================
-def lay_tu_ketqua365(d, m, y):
+def lay_tu_xosodaiphat(d, m, y):
     try:
-        date_str_api = f"{y}-{m}-{d}"
-        url = f"https://api.ketqua365.com/api/xsmb?date={date_str_api}"
-        print(f"🔍 [KETQUA365] Đang lấy: {url}")
+        formatted_date = f"{d}-{m}-{y}"
+        url = f"https://xosodaiphat.com/xsmb-{formatted_date}.html"
+        print(f"🔍 [XOSODAIPHAT] Đang lấy: {url}")
         
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200:
-            print(f"⚠️ [KETQUA365] Mã lỗi: {r.status_code}")
+        print(f"📡 Status: {r.status_code} | Độ dài: {len(r.text)} ký tự")
+        
+        if r.status_code != 200 or len(r.text) < 1000:
+            print(f"⚠️ [XOSODAIPHAT] Không truy cập được hoặc nội dung quá ngắn")
             return None
         
-        data = r.json()
-        if not data or 'data' not in data or not data['data']:
-            print("⚠️ [KETQUA365] Chưa có dữ liệu")
-            return None
+        soup = BeautifulSoup(r.text, 'html.parser')
         
-        result_data = data['data']
+        # === LẤY GIẢI ĐẶC BIỆT ===
+        db = None
+        db_selectors = [
+            '.giai-dac-biet .so-kq',
+            '.db span',
+            '.dacbiet strong',
+            'td:has-text("Đặc biệt") + td',
+        ]
+        for sel in db_selectors:
+            el = soup.select_one(sel)
+            if el:
+                txt = el.get_text(strip=True)
+                match = re.search(r'\b\d{5}\b', txt)
+                if match:
+                    db = match.group()
+                    break
+        if not db:
+            # Tìm số 5 chữ số đầu tiên trên trang
+            all_5digit = re.findall(r'\b\d{5}\b', r.text)
+            if all_5digit and len(all_5digit) >= 5:
+                db = all_5digit[0]
+            else:
+                print("❌ [XOSODAIPHAT] Không tìm thấy Giải Đặc Biệt")
+                return None
         
-        db = result_data.get('special_prize', '')
-        g1 = result_data.get('first_prize', '')
+        # === LẤY GIẢI NHẤT ===
+        g1 = None
+        all_5digit = re.findall(r'\b\d{5}\b', r.text)
+        if len(all_5digit) >= 2:
+            g1 = all_5digit[1]
         
-        if not db or not g1 or len(db) != 5 or len(g1) != 5:
-            print(f"⚠️ [KETQUA365] Dữ liệu không đầy đủ — ĐB:{db}, G1:{g1}")
-            return None
-        
-        # Tất cả các giải → tính lô
-        all_prizes = [db, g1]
-        for key in ['second_prize', 'third_prize', 'fourth_prize', 'fifth_prize', 'sixth_prize', 'seventh_prize']:
-            val = result_data.get(key, [])
-            if isinstance(val, list):
-                all_prizes.extend(val)
-            elif isinstance(val, str):
-                all_prizes.append(val)
-        
-        lotos = list(set(n[-2:] for n in all_prizes if isinstance(n, str) and len(n) >= 2))
+        # === TÍNH LÔ: 2 số cuối tất cả giải ===
+        lotos = list(set(n[-2:] for n in all_5digit if n != '00000'))
         lotos = sorted([n for n in lotos if n != '00'])
         
-        print(f"✅ [KETQUA365] {d}/{m}/{y} | ĐB: {db} | G1: {g1} | Lô: {len(lotos)} số")
+        print(f"✅ [XOSODAIPHAT] {d}/{m}/{y} | ĐB: {db} | G1: {g1 or '---'} | Lô: {len(lotos)} số")
         
         return {
             "date": f"{d}/{m}/{y}",
             "special": db,
-            "g1": g1,
+            "g1": g1 or "",
             "loto": lotos,
-            "source": "KETQUA365.com"
+            "source": "XOSODAIPHAT.com"
         }
     except Exception as e:
-        print(f"❌ [KETQUA365] Lỗi: {str(e)[:100]}")
+        print(f"❌ [XOSODAIPHAT] Lỗi: {str(e)[:100]}")
         return None
 
 # ==========================================
-# NGUỒN 2: KETQUA.NET — ĐÚNG URL ĐỊNH DẠNG
+# NGUỒN 2: XOSO.COM.VN — DỰ PHÒNG
 # ==========================================
-def lay_tu_ketquanet(d, m, y):
+def lay_tu_xosocomvn(d, m, y):
     try:
-        # ✅ Đúng định dạng URL của ketqua.net
-        url = f"https://ketqua.net/ngay/{d}-{m}-{y}"
-        print(f"🔍 [KETQUA.net] Đang lấy: {url}")
+        formatted_date = f"{d}-{m}-{y}"
+        url = f"https://xoso.com.vn/ket-qua-theo-ngay.html?date={formatted_date}"
+        print(f"🔍 [XOSO.com.vn] Đang lấy: {url}")
         
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200 or len(r.text) < 2000:
-            print(f"⚠️ [KETQUA.net] Mã lỗi: {r.status_code} hoặc nội dung quá ngắn")
+        print(f"📡 Status: {r.status_code} | Độ dài: {len(r.text)} ký tự")
+        
+        if r.status_code != 200 or len(r.text) < 1000:
+            print(f"⚠️ [XOSO.com.vn] Không truy cập được hoặc nội dung quá ngắn")
             return None
         
-        html = r.text
+        soup = BeautifulSoup(r.text, 'html.parser')
         
-        # === Tìm Giải Đặc Biệt ===
-        db = None
-        # Thử nhiều mẫu khác nhau
-        patterns = [
-            r'Đặc biệt.*?<td[^>]*?id="[^"]*rs_0_0[^"]*"[^>]*?>(\d{5})<',
-            r'id="rs_0_0"[^>]*?>(\d{5})<',
-            r'class="[^"]*dacbiet[^"]*"[^>]*?>(\d{5})<',
-            r'Giải Đặc biệt.*?(\d{5})',
-        ]
-        for pat in patterns:
-            match = re.search(pat, html, re.DOTALL)
-            if match:
-                db = match.group(1) if len(match.groups()) == 1 else match.group(2)
-                if db and len(db) == 5:
-                    break
+        # === Tìm tất cả số trên trang ===
+        all_text = soup.get_text()
+        all_5digit = re.findall(r'\b\d{5}\b', all_text)
         
-        if not db:
-            print("❌ [KETQUA.net] Không tìm thấy Giải Đặc Biệt")
+        if len(all_5digit) < 5:
+            print(f"❌ [XOSO.com.vn] Quá ít số 5 chữ số: {len(all_5digit)}")
             return None
         
-        # === Tìm Giải Nhất ===
-        g1 = None
-        patterns_g1 = [
-            r'id="rs_1_0"[^>]*?>(\d{5})<',
-            r'Giải nhất.*?(\d{5})',
-        ]
-        for pat in patterns_g1:
-            match = re.search(pat, html, re.DOTALL)
-            if match:
-                g1 = match.group(1)
-                if g1 and len(g1) == 5:
-                    break
-        
-        if not g1:
-            print("❌ [KETQUA.net] Không tìm thấy Giải Nhất")
-            return None
-        
-        # === Tìm tất cả số 5 chữ số trên trang ===
-        all_5digit = re.findall(r'\b\d{5}\b', html)
-        if len(all_5digit) < 10:
-            print(f"⚠️ [KETQUA.net] Quá ít số 5 chữ số: {len(all_5digit)}")
-            return None
+        db = all_5digit[0]
+        g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
         
         # === Tính lô ===
         lotos = list(set(n[-2:] for n in all_5digit if n != '00000'))
         lotos = sorted([n for n in lotos if n != '00'])
         
-        print(f"✅ [KETQUA.net] {d}/{m}/{y} | ĐB: {db} | G1: {g1} | Lô: {len(lotos)} số")
+        print(f"✅ [XOSO.com.vn] {d}/{m}/{y} | ĐB: {db} | G1: {g1 or '---'} | Lô: {len(lotos)} số")
         
         return {
             "date": f"{d}/{m}/{y}",
             "special": db,
-            "g1": g1,
+            "g1": g1 or "",
             "loto": lotos,
-            "source": "KETQUA.net"
+            "source": "XOSO.com.vn"
         }
     except Exception as e:
-        print(f"❌ [KETQUA.net] Lỗi: {str(e)[:100]}")
+        print(f"❌ [XOSO.com.vn] Lỗi: {str(e)[:100]}")
         return None
 
 # ==========================================
@@ -160,13 +144,13 @@ def get_xsmb_result(target_date_str=None):
         print(f"📂 Đọc từ file: {saved['date']} | ĐB: {saved['special']}")
         return saved
     
-    # Bước 2: Thử NGUỒN 1 — API KETQUA365 (nhanh & ổn định nhất)
-    result = lay_tu_ketqua365(d, m, y)
+    # Bước 2: Thử NGUỒN 1 — XOSODAIPHAT (chính)
+    result = lay_tu_xosodaiphat(d, m, y)
     
-    # Bước 3: Nếu thất bại → Thử NGUỒN 2 — KETQUA.net
+    # Bước 3: Nếu thất bại → Thử NGUỒN 2 — XOSO.com.vn (dự phòng)
     if not result:
-        print("🔄 Chuyển sang nguồn KETQUA.net...")
-        result = lay_tu_ketquanet(d, m, y)
+        print("🔄 Chuyển sang nguồn dự phòng XOSO.com.vn...")
+        result = lay_tu_xosocomvn(d, m, y)
     
     # Bước 4: Nếu thành công → Lưu
     if result:
@@ -174,5 +158,5 @@ def get_xsmb_result(target_date_str=None):
         return result
     
     # ❌ Cả 2 nguồn đều thất bại
-    print(f"❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {d}/{m}/{y} — Cả 2 nguồn đều không truy cập được")
+    print(f"❌ CẢ 2 NGUỒN ĐỀU KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {d}/{m}/{y}")
     return None
