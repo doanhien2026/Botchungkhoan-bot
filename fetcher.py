@@ -1,133 +1,132 @@
 import requests
-import random
 import re
 from datetime import datetime, timezone, timedelta
+from data_manager import save_result, get_saved_result
 
 VN_TZ = timezone(timedelta(hours=7))
 
 def get_now_vn():
     return datetime.now(VN_TZ)
 
-def get_xsmb_result(target_date_str=None):
-    if not target_date_str:
-        target_date_str = get_now_vn().strftime("%d/%m/%Y")
-
-    parts = target_date_str.split("/")
-    if len(parts) != 3:
-        return None
-        
-    d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    date_api = f"{d}/{m}/{y}"
-    display_date = f"{d}/{m}/{y}"
-
+def fetch_from_website(d, m, y):
+    """Lấy kết quả TRỰC TIẾP từ KETQUA.net — KHÔNG TẠO SỐ GIẢ"""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "vi-VN,vi;q=0.9"
     }
-
-    # ==========================================
-    # NGUỒN 1: API XOSO.ME — TRẢ JSON, CHÍNH XÁC NHẤT
-    # ==========================================
+    
+    url = f"https://ketqua.net/xsmb/ngay/{d}-{m}-{y}"
+    print(f"🔍 TRUY CẬP: {url}")
+    
     try:
-        url = f"https://api.xoso.me/xsmb?date={y}-{m}-{d}"
-        print(f"🔍 [API XOSO.ME] Đang lấy: {url}")
         r = requests.get(url, headers=headers, timeout=20)
+        print(f"📡 Mã trạng thái: {r.status_code} | Độ dài: {len(r.text)} ký tự")
         
-        if r.status_code == 200:
-            data = r.json()
-            if data and data.get("status") == "success" and data.get("result"):
-                res = data["result"]
-                db = str(res.get("special", ""))
-                g1 = str(res.get("first", ""))
-                g2 = [str(x) for x in res.get("second", [])]
-                g3 = [str(x) for x in res.get("third", [])]
-                g4 = [str(x) for x in res.get("fourth", [])]
-                g5 = [str(x) for x in res.get("fifth", [])]
-                g6 = [str(x) for x in res.get("sixth", [])]
-                g7 = [str(x) for x in res.get("seventh", [])]
-                
-                # Tính LÔ: 2 số cuối tất cả giải
-                all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
-                lotos = [p[-2:] for p in all_prizes if len(str(p)) >= 2]
-                lotos = sorted(list(set(lotos)))
-                
-                print(f"✅ [API XOSO.ME] {display_date} | ĐB: {db} | Lô: {len(lotos)} số")
-                return {
-                    "date": display_date,
-                    "special": db,
-                    "g1": g1,
-                    "g2": g2,
-                    "g3": g3,
-                    "g4": g4,
-                    "g5": g5,
-                    "g6": g6,
-                    "g7": g7,
-                    "loto": lotos,
-                    "source": "API XOSO.ME"
-                }
-    except Exception as e:
-        print(f"❌ [API XOSO.ME] Lỗi: {str(e)[:60]}")
-
-    # ==========================================
-    # NGUỒN 2: KETQUA.NET API — DỰ PHÒNG
-    # ==========================================
-    try:
-        url = f"https://ketqua.net/api?date={d}-{m}-{y}"
-        print(f"🔍 [KETQUA.net API] Đang lấy: {url}")
-        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code != 200:
+            print("❌ Trang không truy cập được")
+            return None
+            
+        if len(r.text) < 500:
+            print("❌ Trang quá ngắn — chưa có kết quả")
+            return None
         
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("data"):
-                res = data["data"]
-                db = str(res.get("DB", ""))
-                g1 = str(res.get("G1", ""))
-                g2 = res.get("G2", [])
-                g3 = res.get("G3", [])
-                g4 = res.get("G4", [])
-                g5 = res.get("G5", [])
-                g6 = res.get("G6", [])
-                g7 = res.get("G7", [])
-                
-                all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
-                lotos = [str(p)[-2:] for p in all_prizes if len(str(p)) >= 2]
-                lotos = sorted(list(set(lotos)))
-                
-                print(f"✅ [KETQUA.net API] {display_date} | ĐB: {db} | Lô: {len(lotos)} số")
-                return {
-                    "date": display_date,
-                    "special": db,
-                    "g1": g1,
-                    "g2": g2,
-                    "g3": g3,
-                    "g4": g4,
-                    "g5": g5,
-                    "g6": g6,
-                    "g7": g7,
-                    "loto": lotos,
-                    "source": "KETQUA.net API"
-                }
+        html = r.text
+
+        # === LẤY ĐẶC BIỆT ===
+        db = None
+        db_patterns = [
+            r'id="rs_0_0"[^>]*>(\d{5})<',
+            r'Đặc biệt.*?<b[^>]*>(\d{5})</b>',
+            r'class="special[^>]*>(\d{5})'
+        ]
+        for pat in db_patterns:
+            m = re.search(pat, html, re.DOTALL)
+            if m:
+                db = m.group(1)
+                break
+
+        # === LẤY GIẢI NHẤT ===
+        g1 = None
+        g1_patterns = [
+            r'id="rs_1_0"[^>]*>(\d{5})<',
+            r'Giải nhất.*?<b[^>]*>(\d{5})</b>'
+        ]
+        for pat in g1_patterns:
+            m = re.search(pat, html, re.DOTALL)
+            if m:
+                g1 = m.group(1)
+                break
+
+        if not db or not g1:
+            print(f"⚠️ Chưa tìm thấy kết quả — ĐB:{db}, G1:{g1}")
+            return None
+
+        # === LẤY TẤT CẢ GIẢI → TÍNH LÔ ===
+        g2 = re.findall(r'id="rs_2_\d+"[^>]*>(\d{5})<', html)
+        g3 = re.findall(r'id="rs_3_\d+"[^>]*>(\d{5})<', html)
+        g4 = re.findall(r'id="rs_4_\d+"[^>]*>(\d{4})<', html)
+        g5 = re.findall(r'id="rs_5_\d+"[^>]*>(\d{4})<', html)
+        g6 = re.findall(r'id="rs_6_\d+"[^>]*>(\d{3})<', html)
+        g7 = re.findall(r'id="rs_7_\d+"[^>]*>(\d{2})<', html)
+
+        # Tính LÔ: 2 số cuối của tất cả giải
+        all_prizes = [db, g1] + g2 + g3 + g4 + g5 + g6 + g7
+        lotos = []
+        for p in all_prizes:
+            s = str(p).strip()
+            if len(s) >= 2 and s.isdigit():
+                lotos.append(s[-2:])
+        lotos = sorted(list(set(lotos)))
+
+        if len(lotos) < 20:
+            print(f"⚠️ Số lô quá ít: {len(lotos)} — chưa có kết quả")
+            return None
+
+        # === TẠO KẾT QUẢ ===
+        result = {
+            "date": f"{d}/{m}/{y}",
+            "special": db,
+            "g1": g1,
+            "g2": g2,
+            "g3": g3,
+            "g4": g4,
+            "g5": g5,
+            "g6": g6,
+            "g7": g7,
+            "loto": lotos,
+            "source": "KETQUA.net (trực tiếp)"
+        }
+
+        print(f"✅ LẤY THÀNH CÔNG! ĐB: {db} | Lô: {len(lotos)} số")
+        return result
+
     except Exception as e:
-        print(f"❌ [KETQUA.net API] Lỗi: {str(e)[:60]}")
+        print(f"❌ Lỗi truy cập: {str(e)[:80]}")
+        return None
 
-    # ==========================================
-    # TẤT CẢ NGUỒN LỖI → TRẢ None (KHÔNG TẠO SỐ GIẢ!)
-    # ==========================================
-    print(f"❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {display_date}")
-    return None
-
-# === DỰ BÁO ===
-def get_xsmb_prediction(target_date_str=None):
+def get_xsmb_result(target_date_str=None):
+    """Lấy kết quả: Ưu tiên file lưu → nếu không thì lấy từ web → KHÔNG TẠO SỐ GIẢ"""
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
+
     parts = target_date_str.split("/")
     if len(parts) != 3:
         return None
+
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    random.seed(int(f"{y}{m}{d}") + 999)
-    return {
-        "date": f"{d}/{m}/{y}",
-        "bach_thu": str(random.randint(0, 99)).zfill(2),
-        "song_thu": [str(random.randint(0, 99)).zfill(2) for _ in range(2)],
-        "lo_xiu": [str(random.randint(0, 99)).zfill(2) for _ in range(4)]
-    }
+
+    # Bước 1: Đọc từ file đã lưu
+    saved = get_saved_result(f"{d}/{m}/{y}")
+    if saved:
+        print(f"📂 Đọc từ file: {saved['date']} | ĐB: {saved['special']}")
+        return saved
+
+    # Bước 2: Lấy từ trang web
+    result = fetch_from_website(d, m, y)
+    if result:
+        save_result(result)  # Lưu vào file ngay
+        return result
+
+    # ❌ Không lấy được → TRẢ None, KHÔNG TẠO SỐ GIẢ!
+    print(f"❌ KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {d}/{m}/{y} — KHÔNG TẠO SỐ GIẢ")
+    return None
