@@ -12,114 +12,58 @@ HEADERS = {
 def get_now_vn():
     return datetime.now(VN_TZ)
 
-# ==========================================
-# NGUỒN 1: XOSODAIPHAT.COM — NGUỒN CHÍNH
-# ==========================================
+# ========== NGUỒN 1: XOSODAIPHAT.COM ==========
 def lay_tu_xosodaiphat(d, m, y):
     try:
-        formatted_date = f"{d}-{m}-{y}"
-        url = f"https://xosodaiphat.com/xsmb-{formatted_date}.html"
-        print(f"🔍 [XOSODAIPHAT] Đang lấy: {url}")
-        
+        url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
+        print(f"🔍 [XOSODAIPHAT] {url}")
         r = requests.get(url, headers=HEADERS, timeout=15)
-        print(f"📡 Status: {r.status_code} | Độ dài: {len(r.text)} ký tự")
-        
         if r.status_code != 200 or len(r.text) < 1000:
-            print(f"⚠️ [XOSODAIPHAT] Không truy cập được hoặc nội dung quá ngắn")
             return None
-        
-        soup = BeautifulSoup(r.text, 'html.parser')
-        
-        # === LẤY GIẢI ĐẶC BIỆT ===
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
         if len(all_5digit) < 5:
-            print(f"❌ [XOSODAIPHAT] Không đủ dữ liệu: {len(all_5digit)} số")
             return None
-        
         db = all_5digit[0]
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        
-        # === TÍNH LÔ: 2 số cuối tất cả giải ===
-        lotos = list(set(n[-2:] for n in all_5digit if n != '00000'))
-        lotos = sorted([n for n in lotos if n != '00'])
-        
-        print(f"✅ [XOSODAIPHAT] {d}/{m}/{y} | ĐB: {db} | G1: {g1 or '---'} | Lô: {len(lotos)} số")
-        
-        return {
-            "date": f"{d}/{m}/{y}",
-            "special": db,
-            "g1": g1 or "",
-            "loto": lotos,
-            "source": "XOSODAIPHAT.com"
-        }
+        lotos = sorted(set(n[-2:] for n in all_5digit if n != '00000' and n[-2:] != '00'))
+        print(f"✅ ĐB:{db} | G1:{g1} | Lô:{len(lotos)} số")
+        return {"date":f"{d}/{m}/{y}", "special":db, "g1":g1, "loto":lotos, "source":"XOSODAIPHAT.com"}
     except Exception as e:
-        print(f"❌ [XOSODAIPHAT] Lỗi: {str(e)[:100]}")
+        print(f"❌ XOSODAIPHAT lỗi: {str(e)[:80]}")
         return None
 
-# ==========================================
-# NGUỒN 2: XOSO.COM.VN — DỰ PHÒNG
-# ==========================================
+# ========== NGUỒN 2: XOSO.COM.VN — DỰ PHÒNG ==========
 def lay_tu_xosocomvn(d, m, y):
     try:
-        formatted_date = f"{d}-{m}-{y}"
-        url = f"https://xoso.com.vn/ket-qua-theo-ngay.html?date={formatted_date}"
-        print(f"🔍 [XOSO.com.vn] Đang lấy: {url}")
-        
+        url = f"https://xoso.com.vn/ket-qua-theo-ngay.html?date={d}-{m}-{y}"
+        print(f"🔍 [XOSO.com.vn] {url}")
         r = requests.get(url, headers=HEADERS, timeout=15)
-        print(f"📡 Status: {r.status_code} | Độ dài: {len(r.text)} ký tự")
-        
         if r.status_code != 200 or len(r.text) < 1000:
-            print(f"⚠️ [XOSO.com.vn] Không truy cập được hoặc nội dung quá ngắn")
             return None
-        
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
         if len(all_5digit) < 5:
-            print(f"❌ [XOSO.com.vn] Không đủ dữ liệu: {len(all_5digit)} số")
             return None
-        
         db = all_5digit[0]
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        
-        # === TÍNH LÔ ===
-        lotos = list(set(n[-2:] for n in all_5digit if n != '00000'))
-        lotos = sorted([n for n in lotos if n != '00'])
-        
-        print(f"✅ [XOSO.com.vn] {d}/{m}/{y} | ĐB: {db} | G1: {g1 or '---'} | Lô: {len(lotos)} số")
-        
-        return {
-            "date": f"{d}/{m}/{y}",
-            "special": db,
-            "g1": g1 or "",
-            "loto": lotos,
-            "source": "XOSO.com.vn"
-        }
+        lotos = sorted(set(n[-2:] for n in all_5digit if n != '00000' and n[-2:] != '00'))
+        print(f"✅ ĐB:{db} | G1:{g1} | Lô:{len(lotos)} số")
+        return {"date":f"{d}/{m}/{y}", "special":db, "g1":g1, "loto":lotos, "source":"XOSO.com.vn"}
     except Exception as e:
-        print(f"❌ [XOSO.com.vn] Lỗi: {str(e)[:100]}")
+        print(f"❌ XOSO.com.vn lỗi: {str(e)[:80]}")
         return None
 
-# ==========================================
-# CHỨC NĂNG CHÍNH — GỌI TỪ BOT
-# ==========================================
+# ========== CHỨC NĂNG CHÍNH ==========
 def get_xsmb_result(target_date_str=None):
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
-    
     parts = target_date_str.split("/")
     if len(parts) != 3:
         return None
-    
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    
-    # Thử NGUỒN 1 — XOSODAIPHAT
+    # Thử nguồn 1
     result = lay_tu_xosodaiphat(d, m, y)
-    
-    # Thử NGUỒN 2 — XOSO.com.vn
+    # Thử nguồn 2 nếu nguồn 1 lỗi
     if not result:
-        print("🔄 Chuyển sang nguồn dự phòng XOSO.com.vn...")
+        print("🔄 Chuyển nguồn dự phòng...")
         result = lay_tu_xosocomvn(d, m, y)
-    
-    if result:
-        return result
-    
-    print(f"❌ CẢ 2 NGUỒN ĐỀU KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {d}/{m}/{y}")
-    return None
+    return result
