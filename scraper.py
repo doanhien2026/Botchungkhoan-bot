@@ -1,5 +1,6 @@
 import requests
 import re
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 VN_TZ = timezone(timedelta(hours=7))
@@ -12,55 +13,63 @@ def get_now_vn():
     return datetime.now(VN_TZ)
 
 # ==============================================
-# ✅ HÀM KIỂM TRA SỐ GIẢ — TẠO 1 LẦN, DÙNG Ở 2 NGUỒN
+# ✅ KIỂM TRA SỐ GIẢ — CHÍNH XÁC
 # ==============================================
 def is_dummy_number(num_str):
-    """Kiểm tra xem có phải số mặc định/giả không"""
     if not num_str or len(num_str) != 5:
         return True
-    # Các số mặc định thường gặp
     dummy_list = {"99999", "00000", "11111", "12345", "54321", "88888"}
     if num_str in dummy_list:
         return True
-    # Kiểm tra số lặp toàn bộ (99999, 11111...)
     if all(c == num_str[0] for c in num_str):
         return True
     return False
 
-# ========== NGUỒN 1: XOSODAIPHAT.COM ==========
+# ==============================================
+# ✅ LẤY DỮ LIỆU TỪ XOSODAIPHAT — CẢI THIỆN
+# ==============================================
 def lay_tu_xosodaiphat(d, m, y):
     try:
         url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
-        print(f"🔍 [XOSODAIPHAT] {url}")
+        print(f"🔍 [XOSODAIPHAT] Đang lấy: {url}")
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200 or len(r.text) < 1000:
+        
+        if r.status_code != 200:
+            print(f"❌ Trang trả mã lỗi: {r.status_code}")
             return None
         
-        # Lấy tất cả số 5 chữ số
+        # ✅ Kiểm tra trang có tồn tại kết quả không
+        if "Không tìm thấy kết quả" in r.text or "ngày không tồn tại" in r.text:
+            print(f"⚠️ Trang không có dữ liệu ngày {d}/{m}/{y}")
+            return None
+        
+        # ✅ Lấy tất cả số 5 chữ số
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
-        if len(all_5digit) < 5:
+        print(f"📋 Tìm thấy {len(all_5digit)} số 5 chữ số trên trang")
+        
+        if len(all_5digit) < 3:
+            print(f"⚠️ Không đủ dữ liệu (chỉ có {len(all_5digit)} số)")
             return None
         
-        db = all_5digit[0]
+        # ✅ Lọc bỏ số giả trước
+        real_numbers = [n for n in all_5digit if not is_dummy_number(n)]
+        print(f"✅ Số hợp lệ sau lọc: {len(real_numbers)}")
         
-        # ==============================================
-        # ✅ KIỂM TRA SỐ GIẢ → NẾU CÓ → TRẢ VỀ NGAY None
-        # ==============================================
-        if is_dummy_number(db):
-            print(f"⚠️ [XOSODAIPHAT] Chưa có kết quả thực tế! Đặc biệt = {db} (số giả/mặc định)")
+        if len(real_numbers) < 2:
+            print(f"⚠️ Chưa có kết quả thực tế (chỉ thấy số giả)")
             return None
         
-        g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if is_dummy_number(g1):
-            g1 = ""
+        # ✅ Lấy Đặc Biệt = số đầu tiên KHÔNG phải giả
+        db = real_numbers[0]
+        g1 = real_numbers[1] if len(real_numbers) >= 2 else ""
         
-        # Lọc số lô — BỎ SỐ GIẢ
+        # ✅ Lấy 2 chữ số cuối làm lô
         lotos = sorted(set(
-            n[-2:] for n in all_5digit
-            if not is_dummy_number(n) and n[-2:] != '00'
+            n[-2:] for n in real_numbers
+            if n[-2:] != '00'
         ))
         
-        print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
+        print(f"🏆 ĐB:{db} | 🥈 G1:{g1 or '---'} | 🎯 Lô:{len(lotos)} số")
         return {
             "date": f"{d}/{m}/{y}",
             "special": db,
@@ -69,39 +78,31 @@ def lay_tu_xosodaiphat(d, m, y):
             "source": "XOSODAIPHAT.com"
         }
     except Exception as e:
-        print(f"❌ XOSODAIPHAT lỗi: {str(e)[:80]}")
+        print(f"❌ Lỗi XOSODAIPHAT: {str(e)}")
         return None
 
-# ========== NGUỒN 2: XOSO.COM.VN — DỰ PHÒNG ==========
+# ==============================================
+# ✅ NGUỒN DỰ PHÒNG — XOSO.COM.VN
+# ==============================================
 def lay_tu_xosocomvn(d, m, y):
     try:
         url = f"https://xoso.com.vn/ket-qua-theo-ngay.html?date={d}-{m}-{y}"
-        print(f"🔍 [XOSO.com.vn] {url}")
+        print(f"🔍 [XOSO.com.vn] Đang lấy: {url}")
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200 or len(r.text) < 1000:
+        
+        if r.status_code != 200 or len(r.text) < 500:
             return None
         
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
-        if len(all_5digit) < 5:
+        real_numbers = [n for n in all_5digit if not is_dummy_number(n)]
+        
+        if len(real_numbers) < 2:
             return None
         
-        db = all_5digit[0]
+        db = real_numbers[0]
+        g1 = real_numbers[1] if len(real_numbers) >= 2 else ""
+        lotos = sorted(set(n[-2:] for n in real_numbers if n[-2:] != '00'))
         
-        # ✅ CÙNG KIỂM TRA SỐ GIẢ
-        if is_dummy_number(db):
-            print(f"⚠️ [XOSO.com.vn] Chưa có kết quả thực tế! Đặc biệt = {db}")
-            return None
-        
-        g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if is_dummy_number(g1):
-            g1 = ""
-        
-        lotos = sorted(set(
-            n[-2:] for n in all_5digit
-            if not is_dummy_number(n) and n[-2:] != '00'
-        ))
-        
-        print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
         return {
             "date": f"{d}/{m}/{y}",
             "special": db,
@@ -110,10 +111,12 @@ def lay_tu_xosocomvn(d, m, y):
             "source": "XOSO.com.vn"
         }
     except Exception as e:
-        print(f"❌ XOSO.com.vn lỗi: {str(e)[:80]}")
+        print(f"❌ Lỗi XOSO.com.vn: {str(e)}")
         return None
 
-# ========== CHỨC NĂNG CHÍNH ==========
+# ==============================================
+# ✅ CHỨC NĂNG CHÍNH — THỨ TỰ ƯU TIÊN
+# ==============================================
 def get_xsmb_result(target_date_str=None):
     if not target_date_str:
         target_date_str = get_now_vn().strftime("%d/%m/%Y")
@@ -122,15 +125,26 @@ def get_xsmb_result(target_date_str=None):
         return None
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
     
+    # ✅ Kiểm tra ngày có hợp lệ không
+    try:
+        target_dt = datetime(int(y), int(m), int(d), tzinfo=VN_TZ)
+        now = get_now_vn()
+        # Nếu là hôm nay và chưa đến 18:40 → chưa có kết quả
+        if target_dt.date() == now.date() and now.hour < 18 or (now.hour == 18 and now.minute < 35):
+            print(f"⏳ Hôm nay chưa đến 18:35 → chưa có kết quả")
+            return None
+        # Nếu là ngày tương lai → chưa có kết quả
+        if target_dt.date() > now.date():
+            print(f"⏳ Ngày tương lai → chưa có kết quả")
+            return None
+    except:
+        return None
+    
     # Thử nguồn 1
     result = lay_tu_xosodaiphat(d, m, y)
-    # Thử nguồn 2 nếu nguồn 1 trả None (chưa có kết quả)
+    # Thử nguồn 2 nếu nguồn 1 thất bại
     if not result:
-        print("🔄 Chuyển nguồn dự phòng XOSO.com.vn...")
+        print("🔄 Chuyển nguồn dự phòng...")
         result = lay_tu_xosocomvn(d, m, y)
-    
-    # Nếu cả 2 nguồn đều chưa có kết quả → trả None
-    if not result:
-        print(f"❌ Cả 2 nguồn đều chưa có kết quả thực tế cho ngày {target_date_str}")
     
     return result
