@@ -15,12 +15,13 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Thay Token trực tiếp tại đây (giữ nguyên cặp dấu ngoặc kép)
-TOKEN = "ĐIỀN_TOKEN_BOT_CỦA_BẠN_VÀO_ĐÂY"
+# Dán Token thật của bạn vào giữa ngoặc kép bên dưới (Hàm .strip() sẽ tự làm sạch khoảng trắng)
+RAW_TOKEN = "ĐIỀN_TOKEN_BOT_CỦA_BẠN_VÀO_ĐÂY"
+TOKEN = RAW_TOKEN.strip()
 
 bot = telebot.TeleBot(TOKEN)
 
-# Lệnh /start
+# 1. Lệnh /start
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     msg = (
@@ -30,7 +31,7 @@ def send_welcome(message):
     )
     bot.reply_to(message, msg, parse_mode="HTML")
 
-# Lệnh /dubao
+# 2. Lệnh /dubao (Tín hiệu Dự Báo)
 @bot.message_handler(commands=['dubao'])
 def handle_dubao(message):
     text = message.text.strip()
@@ -54,7 +55,7 @@ def handle_dubao(message):
     
     bot.reply_to(message, msg, parse_mode="HTML")
 
-# Lấy Kết Quả theo Ngày
+# 3. Tra cứu Kết Quả theo Ngày
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     text = message.text.strip()
