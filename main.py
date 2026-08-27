@@ -19,7 +19,7 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
 
-# === GỬI BÁO CÁO TỰ ĐỘNG ===
+# === GỬI BÁO CÁO TỰ ĐỘNG 18:35 ===
 def send_auto_report():
     today_str = get_now_vn().strftime("%d/%m/%Y")
     data = get_xsmb_result(today_str)
@@ -39,8 +39,16 @@ def send_auto_report():
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += f"🔴 <b>Đặc Biệt:</b> <code>{data['special']}</code>\n"
     msg += f"🥇 <b>Giải Nhất:</b> <code>{data['g1']}</code>\n"
+    
+    # Hiển thị Giải Nhì & Ba nếu có
+    if 'g2' in data and data['g2']:
+        msg += f"🥈 <b>Giải Nhì:</b> {', '.join(f'<code>{x}</code>' for x in data['g2'])}\n"
+    if 'g3' in data and data['g3']:
+        msg += f"🥉 <b>Giải Ba:</b> {', '.join(f'<code>{x}</code>' for x in data['g3'])}\n"
+    
     if 'loto' in data and data['loto']:
-        msg += f"🎲 <b>Lô về:</b> {', '.join(f'<code>{x}</code>' for x in data['loto'])}\n"
+        msg += f"🎲 <b>Lô về ({len(data['loto'])} số):</b> {', '.join(f'<code>{x}</code>' for x in data['loto'])}\n"
+    
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += f"🔮 <b>DỰ BÁO DỰ KIẾN</b>\n"
     msg += f"🎯 Bạch Thủ Lô: <code>{pred['bach_thu']}</code>\n"
@@ -52,7 +60,7 @@ def send_auto_report():
     bot.send_message(CHAT_ID, msg, parse_mode="HTML")
     print(f"✅ Đã gửi báo cáo: {today_str}")
 
-# === LỊCH TRÌNH TỰ ĐỘNG 18:35 ===
+# === LỊCH TRÌNH TỰ ĐỘNG ===
 def auto_scheduler():
     last_send = None
     while True:
@@ -111,8 +119,15 @@ def lookup(msg):
         reply += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         reply += f"🔴 <b>Đặc Biệt:</b> <code>{data['special']}</code>\n"
         reply += f"🥇 <b>Giải Nhất:</b> <code>{data['g1']}</code>\n"
+        
+        if 'g2' in data and data['g2']:
+            reply += f"🥈 <b>Giải Nhì:</b> {', '.join(f'<code>{x}</code>' for x in data['g2'])}\n"
+        if 'g3' in data and data['g3']:
+            reply += f"🥉 <b>Giải Ba:</b> {', '.join(f'<code>{x}</code>' for x in data['g3'])}\n"
         if 'loto' in data and data['loto']:
-            reply += f"🎲 <b>Lô về:</b> {', '.join(f'<code>{x}</code>' for x in data['loto'])}\n"
+            reply += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            reply += f"🎲 <b>Lô về ({len(data['loto'])} số):</b> {', '.join(f'<code>{x}</code>' for x in data['loto'])}\n"
+        
         bot.edit_message_text(reply, chat_id=status.chat.id, message_id=status.message_id, parse_mode="HTML")
     else:
         bot.edit_message_text(
@@ -125,11 +140,12 @@ def lookup(msg):
             parse_mode="HTML"
         )
 
-# === KHỞI ĐỘNG ===
+# === KHỞI ĐỘNG — ĐÃ XÓA skip_pending_updates ===
 if __name__ == '__main__':
     print("🚀 BOT XSMB ĐANG KHỞI ĐỘNG...")
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_scheduler, daemon=True).start()
     bot.remove_webhook()
     print("✅ Bot sẵn sàng! Lắng nghe lệnh...")
+    # ✅ Không có tham số skip_pending_updates → tương thích mọi phiên bản
     bot.infinity_polling()
