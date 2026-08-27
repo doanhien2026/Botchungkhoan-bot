@@ -27,7 +27,8 @@ def cmd_start(message):
     bot.send_message(message.chat.id,
         "🤖 **BOT XSMB — LẤY KẾT QUẢ THỰC**\n"
         "📡 Nguồn: XOSODAIPHAT + XOSO.com.vn\n"
-        "✅ Không tạo số giả | 💾 Lưu lịch sử | ⏰ Tự động 18:35\n\n"
+        "✅ Chỉ trả kết quả thực tế — KHÔNG tạo số giả\n"
+        "💾 Lưu lịch sử tự động | ⏰ Tự động gửi 18:35\n\n"
         "📌 Gõ ngày: **DDMMYYYY** (VD: 24082026)"
     )
 
@@ -36,36 +37,51 @@ def cmd_start(message):
 def handle_message(message):
     user_id = str(message.chat.id)
     text = message.text.strip()
+    
     if user_id not in [CHAT_ID, CHAT_ID.replace('-100','')]:
         return
+    
     if not re.match(r"^\d{8}$", text):
-        bot.send_message(user_id, "⚠️ Định dạng sai! VD: **24082026** (DDMMYYYY)")
+        bot.send_message(user_id, 
+            "⚠️ Định dạng sai!\n"
+            "Ví dụ: **24082026** (DDMMYYYY)\n"
+            "Gõ ngày đã qua để xem kết quả thực tế."
+        )
         return
+    
     try:
         d, m, y = text[:2], text[2:4], text[4:8]
         date_str = f"{d}/{m}/{y}"
         datetime(int(y), int(m), int(d))
+        
         bot.send_message(user_id, f"🔍 Đang lấy dữ liệu **{date_str}**...")
         result = fetch_result(date_str)
+        
         if not result:
             bot.send_message(user_id,
-                f"⚠️ **KHÔNG CÓ DỮ LIỆU NGÀY {date_str}**\n"
-                "→ Nếu là hôm nay: Chờ sau 18:35\n"
-                "→ Nếu là ngày trước: Nguồn tạm không truy cập được\n"
-                "❌ **Bot KHÔNG tạo số giả** — thử lại sau nhé!"
+                f"⚠️ **CHƯA CÓ KẾT QUẢ THỰC TẾ — {date_str}**\n\n"
+                "→ Nếu là hôm nay: Kết quả sẽ có sau **18:35**\n"
+                "→ Nếu là ngày tương lai: Chưa có kết quả\n"
+                "→ Nếu là ngày quá khứ: Nguồn tạm thời không truy cập được\n\n"
+                "❌ **Bot KHÔNG tạo số giả** — vui lòng thử lại sau nhé!"
             )
             return
-        # Gửi kết quả
+        
+        # === GỬI KẾT QUẢ THỰC TẾ ===
         reply = (
             f"📅 **KẾT QUẢ XSMB — {date_str}**\n"
             f"📊 Nguồn: {result['source']}\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🏆 **Đặc Biệt:** `{result['special']}`\n"
-            f"🥈 **Giải Nhất:** `{result['g1'] or '---'}`\n"
-            f"🎯 **Lô về ({len(result['loto'])} số):** `{', '.join(result['loto'])}`\n\n"
-            "⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*"
         )
+        if result.get('g1'):
+            reply += f"🥈 **Giải Nhất:** `{result['g1']}`\n"
+        if result.get('loto'):
+            reply += f"🎯 **Lô về ({len(result['loto'])} số):** `{', '.join(result['loto'])}`\n"
+        reply += "\n⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*"
+        
         bot.send_message(user_id, reply, parse_mode="Markdown")
+        
     except ValueError:
         bot.send_message(user_id, "❌ Ngày không hợp lệ! Kiểm tra lại nhé.")
     except Exception as e:
@@ -87,10 +103,12 @@ def auto_scheduler():
                     reply = (
                         f"📢 **KẾT QUẢ TỰ ĐỘNG — {today}**\n"
                         f"🏆 Đặc Biệt: `{result['special']}`\n"
-                        f"🥈 Giải Nhất: `{result['g1'] or '---'}`\n"
-                        f"🎯 Lô về: `{', '.join(result['loto'])}`\n\n"
-                        "⚠️ Chơi có trách nhiệm!"
                     )
+                    if result.get('g1'):
+                        reply += f"🥈 Giải Nhất: `{result['g1']}`\n"
+                    if result.get('loto'):
+                        reply += f"🎯 Lô về: `{', '.join(result['loto'])}`\n"
+                    reply += "\n⚠️ Chơi có trách nhiệm!"
                     bot.send_message(CHAT_ID, reply, parse_mode="Markdown")
                     last_sent = today
                     print(f"✅ Đã gửi tự động: {today}")
@@ -99,26 +117,26 @@ def auto_scheduler():
             print(f"❌ Lỗi lịch trình: {e}")
             time.sleep(60)
 
-# ========== KHỞI ĐỘNG — SỬA LỖI 409 ==========
+# ========== KHỞI ĐỘNG — SỬA LỖI 409 TRIỆT ĐỂ ==========
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — HOÀN CHỈNH V2.0 | SỬA LỖI 409")
+    print("🚀 BOT XSMB — HOÀN CHỈNH | SỬA LỖI 409 + BỎ SỐ GIẢ")
     print("📡 Nguồn: XOSODAIPHAT + XOSO.com.vn")
     print("="*60)
     
-    # Xóa webhook cũ — QUAN TRỌNG!
+    # === QUAN TRỌNG: XÓA WEBHOOK & DỪNG KẾT NỐI CŨ ===
     bot.remove_webhook()
-    print("🔄 Đã xóa webhook cũ")
+    print("🔄 Đã xóa webhook cũ — tránh xung đột kết nối")
     
-    # Khởi động Flask
+    # === KHỞI ĐỘNG FLASK ===
     Thread(target=run_flask, daemon=True).start()
-    print("🌐 Flask server đã chạy")
+    print("🌐 Flask server chạy ngầm — giữ service hoạt động")
     
-    # Khởi động lịch trình
+    # === KHỞI ĐỘNG LỊCH TRÌNH ===
     Thread(target=auto_scheduler, daemon=True).start()
-    print("⏰ Lịch trình 18:35 đã bật")
+    print("⏰ Lịch trình tự động 18:35 đã bật")
     
-    print("✅ Bot sẵn sàng! Gõ DDMMYYYY để tra cứu.")
+    print("✅ Bot sẵn sàng! Chỉ 1 luồng — KHÔNG LỖI 409")
     print("="*60)
     
     # === CHỈ 1 LUỒNG → KHÔNG LỖI 409 ===
@@ -130,5 +148,6 @@ if __name__ == "__main__":
                 allowed_updates=['message', 'callback_query']
             )
         except Exception as e:
-            print(f"⚠️ Lỗi polling: {e} — Thử lại sau 10s...")
-            time.sleep(10)
+            print(f"⚠️ Lỗi kết nối: {e}")
+            print("🔄 Thử lại sau 15 giây...")
+            time.sleep(15)
