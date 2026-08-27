@@ -38,21 +38,44 @@ def save_data(data):
         print(f"❌ Lỗi lưu: {e}")
 
 def analyze(history):
-    if not history: return None
+    if not history: 
+        return None
+        
     all_loto = []
-    for day in history: all_loto.extend(day.get("loto", []))
-    if not all_loto: return None
+    dau_de_list = []
+    
+    for day in history:
+        # Thống kê Lô
+        all_loto.extend(day.get("loto", []))
+        
+        # Thống kê Đầu số đề (Chữ số đầu tiên của Đuôi 2 số Giải Đặc Biệt)
+        sp = str(day.get("special", ""))
+        if len(sp) >= 2:
+            dau_de = sp[-2] # Lấy chữ số hàng chục của GĐB
+            dau_de_list.append(dau_de)
+
+    if not all_loto: 
+        return None
 
     tong_ngay = max(len(history), 1)
+    
+    # Dự đoán Lô
     freq = Counter(all_loto)
     top3 = freq.most_common(3)
     while len(top3) < 3: top3.append(("00", 1))
     top5 = freq.most_common(5)
     xien = top3[1:] + [top5[3]] if len(top5) >= 4 else top3[1:]
 
+    # Dự đoán Đầu số đề xuất hiện nhiều nhất
+    top_dau_de = "0"
+    if dau_de_list:
+        freq_dau = Counter(dau_de_list)
+        top_dau_de = freq_dau.most_common(1)[0][0]
+
     return {
         "top3": [{"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%"} for n in top3],
         "xien": [{"num": n[0], "rate": f"~{round(n[1]/tong_ngay*100)}%"} for n in xien[:2]],
+        "dau_de": top_dau_de
     }
 
 def build_report(result, pred):
@@ -74,6 +97,7 @@ def build_report(result, pred):
         msg += f"\n🤖 *DỰ ĐOÁN THỐNG KÊ*\n"
         msg += f"🎯 *TOP 3 LÔ:* `{pred['top3'][0]['num']}`, `{pred['top3'][1]['num']}`, `{pred['top3'][2]['num']}`\n"
         msg += f"🎯 *2 LÔ XIÊN:* `{pred['xien'][0]['num']}` - `{pred['xien'][1]['num']}`\n"
+        msg += f"🎯 *ĐẦU SỐ ĐỀ:* Đầu `{pred['dau_de']}`\n"
     msg += "\n🎲 *Chơi có trách nhiệm - Chỉ giải trí!*"
     return msg
 
