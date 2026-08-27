@@ -1,3 +1,4 @@
 pyTelegramBotAPI
 requests
-Flask
+flask
+beautifulsoup4
