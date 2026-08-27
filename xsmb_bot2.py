@@ -1,213 +1,135 @@
-# ============================================================
-# 🤖 BOT XSMB — HOÀN CHỈNH V7.2
-# ✅ Sửa lỗi KeyError | ✅ Gửi NGAY khi chạy | ✅ Tự lưu dữ liệu
-# ============================================================
-import os
-import json
-import time
-import requests
+import telebot
 import re
-import threading
+import time
 from datetime import datetime
-from collections import Counter
 from flask import Flask
-
-# ====================== 🔧 ĐÃ ĐIỀN SẴN — KHÔNG CẦN SỬA ======================
-TELEGRAM_TOKEN = "8814072179:AAFRwRv8CIVi6IgYDMe1tfoYLY9kARyAYx0"
-CHAT_ID = "1030583610"
-DATA_FILE = "xsmb_data.json"
-CHECK_INTERVAL = 3600  # Kiểm tra mỗi 1 giờ
-# ============================================================================
+from threading import Thread
+from config import TELEGRAM_TOKEN, CHAT_ID, PORT
+from fetcher import get_xsmb_result, get_now_vn
+from data_manager import get_all_dates
 
 app = Flask(__name__)
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# ========== WEB SERVER ==========
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V7.2 — Đang hoạt động", 200
+    return "✅ Bot XSMB V7.2 — Đang hoạt động & Lưu dữ liệu tự động", 200
 
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, use_reloader=False)
+def run_flask():
+    app.run(host='0.0.0.0', port=PORT)
 
-# ========== ✅ ĐÃ SỬA LỖI KeyError — ĐẢM BẢO CÓ ĐỦ KHÓA ==========
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Tự thêm khóa nếu thiếu — KHÔNG BAO GIỜ BỊ LỖI
-                if "history" not in data:
-                    data["history"] = []
-                if "last_date" not in data:
-                    data["last_date"] = ""
-                return data
-        except Exception as e:
-            print(f"⚠️ File dữ liệu lỗi, tạo mới: {e}")
-    # Trả về cấu trúc ĐÚNG & ĐẦY ĐỦ
-    return {"history": [], "last_date": ""}
+@bot.message_handler(commands=['start'])
+def cmd_start(message):
+    user_id = message.chat.id
+    print(f"📩 /start từ {user_id}")
+    if str(user_id) != str(CHAT_ID) and str(user_id) != str(CHAT_ID).replace('-100', ''):
+        bot.send_message(user_id, "❌ Bạn không có quyền sử dụng bot này.")
+        return
+    bot.send_message(user_id,
+        "🤖 Bot XSMB — Lấy kết quả thực từ KETQUA.net & XOSO.COM.VN\n\n"
+        "📌 Gõ ngày theo định dạng: DDMMYYYY\n"
+        "Ví dụ: 22082026\n\n"
+        "✅ Không tạo số giả — chỉ trả kết quả thực!\n"
+        "✅ Tự động lưu dữ liệu vào file JSON"
+    )
 
-def save_data(data):
+@bot.message_handler(func=lambda msg: True)
+def handle_message(message):
+    user_id = message.chat.id
+    text = message.text.strip()
+    print(f"📩 Nhận tin từ {user_id}: {text}")
+    
+    if str(user_id) != str(CHAT_ID) and str(user_id) != str(CHAT_ID).replace('-100', ''):
+        return
+    
+    if not re.match(r"^\d{8}$", text):
+        bot.send_message(user_id,
+            "⚠️ Định dạng không đúng!\n"
+            "Vui lòng gõ ngày theo định dạng: DDMMYYYY\n"
+            "Ví dụ: 22082026"
+        )
+        return
+    
     try:
-        data["updated_at"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        print(f"❌ Lỗi lưu: {e}")
-        return False
-
-# ========== LẤY KẾT QUẢ XSMB ==========
-def get_xsmb_result():
-    try:
-        url = "https://kqxs.vn/ket-qua-xo-so-mien-bac-truyen-thong"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code != 200:
-            return None
-
-        date_match = re.search(r'Kết quả XSMB ngày (\d{2}/\d{2}/\d{4})', r.text)
-        date_str = date_match.group(1) if date_match else datetime.now().strftime("%d/%m/%Y")
-
-        special_match = re.search(r'Giải Đặc biệt.*?(\d{6})', r.text, re.DOTALL)
-        special = special_match.group(1) if special_match else "------"
-
-        lotos = re.findall(r'\b(\d{2})\b', r.text)
-        lotos = [n for n in lotos if n != '00' and len(n) == 2][:27]
-
-        return {
-            "date": date_str,
-            "special": special,
-            "loto": lotos,
-            "time": datetime.now().strftime("%H:%M:%S")
-        }
-    except Exception as e:
-        print(f"❌ Lỗi lấy dữ liệu: {e}")
-        return None
-
-# ========== PHÂN TÍCH — KHÔNG CẦU 10 NGÀY ==========
-def analyze(history):
-    if len(history) < 1:
-        return None
-
-    all_loto = []
-    for day in history:
-        all_loto.extend(day.get("loto", []))
-
-    if not all_loto:
-        return None
-
-    freq = Counter(all_loto)
-    top3 = freq.most_common(3)
-    dau = Counter([n[0] for n in all_loto]).most_common(1)[0]
-    duoi = Counter([n[1] for n in all_loto]).most_common(1)[0]
-
-    return {
-        "top3": [{"num": n[0], "rate": f"~{round(n[1]/len(history)*100)}%"} for n in top3],
-        "dau": {"num": dau[0], "rate": f"~{round(dau[1]/len(history)*100)}%"},
-        "duoi": {"num": duoi[0], "rate": f"~{round(duoi[1]/len(history)*100)}%"},
-        "duoi_db": history[-1].get("special", "")[-1] if history[-1].get("special") else "?"
-    }
-
-# ========== GỬI TELEGRAM ==========
-def send_tg(text):
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        r = requests.post(url, json={
-            "chat_id": CHAT_ID,
-            "text": text,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": True
-        }, timeout=30)
-        return r.status_code == 200
-    except Exception as e:
-        print(f"❌ Lỗi gửi Telegram: {e}")
-        return False
-
-# ========== BÁO CÁO ĐẸP ==========
-def build_report(result, pred):
-    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    return f"""
-📊 *KẾT QUẢ XSMB — {result['date']}*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 Giải Đặc biệt: *{result['special']}*
-📅 Cập nhật: {now}
-💾 Dữ liệu tự động lưu
-
-🤖 *DỰ ĐOÁN DỰA TRÊN LỊCH SỬ*
-
-🎯 *TOP 3 LÔ NÓI TIẾP*
-1️⃣ {pred['top3'][0]['num']} — {pred['top3'][0]['rate']}
-2️⃣ {pred['top3'][1]['num']} — {pred['top3'][1]['rate']}
-3️⃣ {pred['top3'][2]['num']} — {pred['top3'][2]['rate']}
-
-🔢 *ĐẦU LÔ NÓI* → {pred['dau']['num']} — {pred['dau']['rate']}
-🔢 *ĐUÔI LÔ NÓI* → {pred['duoi']['num']} — {pred['duoi']['rate']}
-
-🎲 *SỐ CUỐI ĐẶC BIỆT*: {pred['duoi_db']}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*
-"""
-
-# ========== CHƯƠNG TRÌNH CHÍNH ==========
-def main():
-    print("🚀 Bot XSMB V7.2 khởi động...")
-
-    # Tải dữ liệu — ĐÃ SỬA LỖI KeyError
-    data = load_data()
-    print(f"📂 Đã có {len(data['history'])} ngày dữ liệu")
-
-    # Khởi động server
-    threading.Thread(target=run_server, daemon=True).start()
-    time.sleep(2)
-    print("✅ Server đã chạy")
-
-    # 📤 GỬI BÁO CÁO NGAY LẦN ĐẦU
-    print("📤 Đang lấy dữ liệu & gửi báo cáo...")
-    result = get_xsmb_result()
-
-    if result:
-        # Lưu nếu ngày mới
-        if data["last_date"] != result["date"]:
-            data["history"].append(result)
-            data["last_date"] = result["date"]
-            if len(data["history"]) > 90:
-                data["history"] = data["history"][-90:]
-            save_data(data)
-            print(f"✅ Đã lưu: {result['date']}")
-
-        # Tạo dự báo & gửi
-        pred = analyze(data["history"])
-        if pred:
-            if send_tg(build_report(result, pred)):
-                print("✅ Đã gửi báo cáo Telegram!")
-            else:
-                print("❌ Gửi thất bại — kiểm tra TOKEN & CHAT_ID")
+        d = text[0:2]
+        m = text[2:4]
+        y = text[4:8]
+        date_str = f"{d}/{m}/{y}"
+        
+        bot.send_message(user_id, f"🔍 Đang lấy dữ liệu ngày {date_str}...")
+        
+        result = get_xsmb_result(date_str)
+        
+        if not result:
+            bot.send_message(user_id,
+                f"⚠️ KHÔNG CÓ DỮ LIỆU NGÀY {date_str}\n\n"
+                "→ Kết quả có thể chưa cập nhật (trước 18:30)\n"
+                "→ Hoặc ngày không hợp lệ\n"
+                "→ Hoặc nguồn dữ liệu tạm thời không truy cập được\n\n"
+                "❌ Bot KHÔNG tạo số giả — vui lòng thử lại sau!"
+            )
+            return
+        
+        special = result.get("special", "Không có")
+        g1 = result.get("g1", "Không có")
+        loto = result.get("loto", [])
+        source = result.get("source", "Không rõ")
+        
+        reply = (
+            f"📅 NGÀY: {date_str}\n"
+            f"📊 Nguồn: {source}\n"
+            f"💾 Đã lưu vào file dữ liệu\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏆 Đặc Biệt: {special}\n"
+            f"🥈 Giải Nhất: {g1}\n"
+            f"🎯 Lô về ({len(loto)} số):\n"
+        )
+        if loto:
+            reply += ", ".join(loto)
         else:
-            print("⚠️ Chưa đủ dữ liệu")
-    else:
-        print("❌ Không lấy được kết quả XSMB")
+            reply += "Không có dữ liệu lô."
+        
+        bot.send_message(user_id, reply)
+        print(f"✅ Đã gửi kết quả: {date_str} | ĐB: {special}")
+        
+    except Exception as e:
+        print(f"❌ Lỗi xử lý: {str(e)}")
+        bot.send_message(user_id, "❌ Lỗi xử lý. Vui lòng kiểm tra định dạng DDMMYYYY.")
 
-    # 🔄 Vòng lặp hàng ngày
-    last_check_date = datetime.now().strftime("%d/%m/%Y")
+def auto_scheduler():
+    last_send = None
     while True:
-        time.sleep(CHECK_INTERVAL)
-        today = datetime.now().strftime("%d/%m/%Y")
-        if last_check_date != today:
-            print(f"🔄 Kiểm tra dữ liệu mới — {today}")
-            result = get_xsmb_result()
-            if result and data["last_date"] != result["date"]:
-                data["history"].append(result)
-                data["last_date"] = result["date"]
-                if len(data["history"]) > 90:
-                    data["history"] = data["history"][-90:]
-                save_data(data)
-                pred = analyze(data["history"])
-                if pred:
-                    send_tg(build_report(result, pred))
-                    print(f"✅ Đã gửi báo cáo ngày {today}")
-            last_check_date = today
+        try:
+            now = get_now_vn()
+            today = now.strftime("%d/%m/%Y")
+            if now.hour == 18 and now.minute >= 35 and last_send != today:
+                result = get_xsmb_result(today)
+                if result:
+                    reply = f"📊 KẾT QUẢ TỰ ĐỘNG NGÀY {today}\n"
+                    reply += f"🏆 ĐB: {result['special']} | 🥈 G1: {result['g1']}\n"
+                    reply += f"🎯 Lô: {', '.join(result['loto'])}"
+                    bot.send_message(CHAT_ID, reply)
+                last_send = today
+            time.sleep(60)
+        except Exception as e:
+            print(f"❌ Lỗi lịch trình: {e}")
+            time.sleep(60)
 
-if __name__ == "__main__":
-    main()
+# === KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG ===
+if __name__ == '__main__':
+    print("🚀 Bot XSMB V7.2 khởi động...")
+    print(f"📂 Đã có {len(get_all_dates())} ngày dữ liệu")
+    
+    # Khởi động Flask
+    Thread(target=run_flask, daemon=True).start()
+    
+    # Khởi động lịch trình tự động
+    Thread(target=auto_scheduler, daemon=True).start()
+    
+    # Xóa webhook cũ
+    bot.remove_webhook()
+    
+    print("✅ Bot sẵn sàng! Đang lắng nghe tin nhắn Telegram...")
+    
+    # === QUAN TRỌNG NHẤT: Bắt đầu lắng nghe ===
+    bot.infinity_polling()
