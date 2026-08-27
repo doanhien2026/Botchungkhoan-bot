@@ -27,17 +27,22 @@ def lay_tu_xosodaiphat(d, m, y):
         
         db = all_5digit[0]
         
-        # ✅ BỎ SỐ MẶC ĐỊNH — CHỈ LẤY KẾT QUẢ THỰC TẾ
-        if db in ["99999", "00000", "11111", "12345"]:
-            print(f"⚠️ Trang chưa có kết quả thực tế (trả về: {db})")
+        # ==============================================
+        # ✅ KIỂM TRA SỐ MẶC ĐỊNH — TRẢ VỀ NONE NẾU CÓ
+        # ==============================================
+        DUMMY_NUMBERS = {"99999", "00000", "11111", "12345", "54321"}
+        if db in DUMMY_NUMBERS:
+            print(f"⚠️ [XOSODAIPHAT] Trang chưa có kết quả thực tế! Đặc biệt = {db} (mặc định)")
             return None
         
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if g1 in ["99999", "00000", "11111", "12345"]:
+        if g1 in DUMMY_NUMBERS:
             g1 = ""
         
-        lotos = sorted(set(n[-2:] for n in all_5digit 
-            if n not in ['00000', '99999', '11111', '12345'] and n[-2:] != '00'))
+        lotos = sorted(set(
+            n[-2:] for n in all_5digit
+            if n not in DUMMY_NUMBERS and n[-2:] != '00'
+        ))
         
         print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
         return {
@@ -66,17 +71,20 @@ def lay_tu_xosocomvn(d, m, y):
         
         db = all_5digit[0]
         
-        # ✅ BỎ SỐ MẶC ĐỊNH
-        if db in ["99999", "00000", "11111", "12345"]:
-            print(f"⚠️ Nguồn chưa có kết quả thực tế")
+        # ✅ CÙNG KIỂM TRA SỐ MẶC ĐỊNH
+        DUMMY_NUMBERS = {"99999", "00000", "11111", "12345", "54321"}
+        if db in DUMMY_NUMBERS:
+            print(f"⚠️ [XOSO.com.vn] Nguồn chưa có kết quả thực tế! Đặc biệt = {db}")
             return None
         
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        if g1 in ["99999", "00000", "11111", "12345"]:
+        if g1 in DUMMY_NUMBERS:
             g1 = ""
         
-        lotos = sorted(set(n[-2:] for n in all_5digit 
-            if n not in ['00000', '99999', '11111', '12345'] and n[-2:] != '00'))
+        lotos = sorted(set(
+            n[-2:] for n in all_5digit
+            if n not in DUMMY_NUMBERS and n[-2:] != '00'
+        ))
         
         print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
         return {
@@ -99,8 +107,15 @@ def get_xsmb_result(target_date_str=None):
         return None
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
     
+    # Thử nguồn 1
     result = lay_tu_xosodaiphat(d, m, y)
+    # Thử nguồn 2 nếu nguồn 1 trả None (chưa có kết quả)
     if not result:
-        print("🔄 Chuyển nguồn dự phòng...")
+        print("🔄 Chuyển nguồn dự phòng XOSO.com.vn...")
         result = lay_tu_xosocomvn(d, m, y)
+    
+    # Nếu cả 2 nguồn đều chưa có kết quả → trả None
+    if not result:
+        print(f"❌ Cả 2 nguồn đều chưa có kết quả thực tế cho ngày {target_date_str}")
+    
     return result
