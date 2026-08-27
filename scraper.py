@@ -20,14 +20,33 @@ def lay_tu_xosodaiphat(d, m, y):
         r = requests.get(url, headers=HEADERS, timeout=15)
         if r.status_code != 200 or len(r.text) < 1000:
             return None
+        
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
         if len(all_5digit) < 5:
             return None
+        
         db = all_5digit[0]
+        
+        # ✅ BỎ SỐ MẶC ĐỊNH — CHỈ LẤY KẾT QUẢ THỰC TẾ
+        if db in ["99999", "00000", "11111", "12345"]:
+            print(f"⚠️ Trang chưa có kết quả thực tế (trả về: {db})")
+            return None
+        
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        lotos = sorted(set(n[-2:] for n in all_5digit if n != '00000' and n[-2:] != '00'))
-        print(f"✅ ĐB:{db} | G1:{g1} | Lô:{len(lotos)} số")
-        return {"date":f"{d}/{m}/{y}", "special":db, "g1":g1, "loto":lotos, "source":"XOSODAIPHAT.com"}
+        if g1 in ["99999", "00000", "11111", "12345"]:
+            g1 = ""
+        
+        lotos = sorted(set(n[-2:] for n in all_5digit 
+            if n not in ['00000', '99999', '11111', '12345'] and n[-2:] != '00'))
+        
+        print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
+        return {
+            "date": f"{d}/{m}/{y}",
+            "special": db,
+            "g1": g1,
+            "loto": lotos,
+            "source": "XOSODAIPHAT.com"
+        }
     except Exception as e:
         print(f"❌ XOSODAIPHAT lỗi: {str(e)[:80]}")
         return None
@@ -40,14 +59,33 @@ def lay_tu_xosocomvn(d, m, y):
         r = requests.get(url, headers=HEADERS, timeout=15)
         if r.status_code != 200 or len(r.text) < 1000:
             return None
+        
         all_5digit = re.findall(r'\b\d{5}\b', r.text)
         if len(all_5digit) < 5:
             return None
+        
         db = all_5digit[0]
+        
+        # ✅ BỎ SỐ MẶC ĐỊNH
+        if db in ["99999", "00000", "11111", "12345"]:
+            print(f"⚠️ Nguồn chưa có kết quả thực tế")
+            return None
+        
         g1 = all_5digit[1] if len(all_5digit) >= 2 else ""
-        lotos = sorted(set(n[-2:] for n in all_5digit if n != '00000' and n[-2:] != '00'))
-        print(f"✅ ĐB:{db} | G1:{g1} | Lô:{len(lotos)} số")
-        return {"date":f"{d}/{m}/{y}", "special":db, "g1":g1, "loto":lotos, "source":"XOSO.com.vn"}
+        if g1 in ["99999", "00000", "11111", "12345"]:
+            g1 = ""
+        
+        lotos = sorted(set(n[-2:] for n in all_5digit 
+            if n not in ['00000', '99999', '11111', '12345'] and n[-2:] != '00'))
+        
+        print(f"✅ ĐB:{db} | G1:{g1 or '---'} | Lô:{len(lotos)} số")
+        return {
+            "date": f"{d}/{m}/{y}",
+            "special": db,
+            "g1": g1,
+            "loto": lotos,
+            "source": "XOSO.com.vn"
+        }
     except Exception as e:
         print(f"❌ XOSO.com.vn lỗi: {str(e)[:80]}")
         return None
@@ -60,9 +98,8 @@ def get_xsmb_result(target_date_str=None):
     if len(parts) != 3:
         return None
     d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
-    # Thử nguồn 1
+    
     result = lay_tu_xosodaiphat(d, m, y)
-    # Thử nguồn 2 nếu nguồn 1 lỗi
     if not result:
         print("🔄 Chuyển nguồn dự phòng...")
         result = lay_tu_xosocomvn(d, m, y)
