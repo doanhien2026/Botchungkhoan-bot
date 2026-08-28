@@ -1,6 +1,8 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI | KHÔNG BỊ BOT KHÁC TRẢ LỜI
+# BOT XSMB — ĐÃ ĐIỀN SẴN TOKEN & CHAT ID CỦA BẠN
+# ⚠️ KHI BỊ BOT KHÁC TRẢ LỜI → LẤY TOKEN MỚI TỪ @BotFather
 # ==========================================================
+
 import telebot
 import re
 import time
@@ -13,11 +15,10 @@ from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
-# ====================== 🔧 ĐIỀN 2 GIÁ TRỊ NÀY! ======================
-# ⚠️ DÙNG TOKEN MỚI TỪ @BotFather — KHÔNG DÙNG TOKEN CŨ!
-TELEGRAM_TOKEN = "THAY_BẰNG_TOKEN_MỚI_CỦA_BẠN"   # ← Điền Token mới
-CHAT_ID = "THAY_BẰNG_CHAT_ID_CỦA_BẠN"            # ← Điền ID từ @getidsbot
-CHANNEL_ID = "-1001030583610"
+# ====================== 🔧 ĐÃ ĐIỀN SẴN THÔNG TIN CỦA BẠN ======================
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"  # ⚠️ Nếu bị trùng → lấy Token MỚI
+CHAT_ID = "1030583610"  # ✅ ĐÚNG ID CÁ NHÂN
+CHANNEL_ID = "-1001030583610"  # ID kênh
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
 
@@ -30,15 +31,20 @@ HEADERS = {
 
 # ====================== 🔐 CHỈ BẠN DÙNG ======================
 def auth(uid):
-    return str(uid) == str(CHAT_ID) or str(uid) == CHANNEL_ID
+    """✅ CHỈ trả lời đúng ID của bạn — người khác bị TỪ CHỐI"""
+    uid_str = str(uid)
+    allowed = [CHAT_ID, CHANNEL_ID.replace("-100", ""), CHANNEL_ID]
+    return uid_str in allowed
 
-# ====================== 💾 DỮ LIỆU ======================
+# ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_all_data():
-    if not os.path.exists(DATA_FILE): return {}
+    if not os.path.exists(DATA_FILE):
+        return {}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except: return {}
+    except:
+        return {}
 
 def save_data(date_str, result):
     data = load_all_data()
@@ -46,16 +52,18 @@ def save_data(date_str, result):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ====================== 📡 LẤY KẾT QUẢ ======================
+# ====================== 📡 LẤY KẾT QUẢ XSMB ======================
 def fetch_result(date_str):
     d, m, y = date_str.split("/")
     url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            return None
         soup = BeautifulSoup(r.text, "html.parser")
         all_5digit = re.findall(r"\b\d{5}\b", soup.get_text())
-        if len(all_5digit) < 8: return None
+        if len(all_5digit) < 8:
+            return None
         dac_biet = all_5digit[-1]
         giai_nhat = all_5digit[-2]
         loto_set = set(num[-2:] for num in all_5digit)
@@ -66,10 +74,10 @@ def fetch_result(date_str):
             "loto": sorted(list(loto_set))[:27]
         }
     except Exception as e:
-        print(f"Lỗi: {e}")
+        print(f"Lỗi lấy dữ liệu: {e}")
         return None
 
-# ====================== 🧠 DỰ ĐOÁN ======================
+# ====================== 🧠 LOGIC DỰ ĐOÁN ======================
 def get_history(days=60):
     all_dates = sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     limit = min(days, len(all_dates))
@@ -120,6 +128,7 @@ def gen_prediction(days=60, target_date=None):
         frate = round(fcnt / len(first_digits) * 100, 1)
     else:
         fd, fcnt, frate = "8", 0, 0.0
+    
     target_info = f" — Ngày {target_date}" if target_date else " — Ngày mai"
     lines = [
         f"📊 **DỰ ĐOÁN KẾT QUẢ{target_info}**",
@@ -149,12 +158,13 @@ def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — TOKEN MỚI HOÀN TOÀN**\n"
-        "✅ Chỉ bạn dùng | ✅ Không bị bot khác trả lời\n\n"
-        "📌 DDMMYYYY → Lưu kết quả\n"
-        "📌 /test DDMMYYYY → Xem thử\n"
-        "📌 /dudoan → Dự đoán ngày mai\n"
-        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
+        "🤖 **BOT XSMB — ĐÃ SẴN SÀNG**\n"
+        "✅ ĐB ≠ G1 | ✅ Lô chính xác | ✅ Dự đoán đầy đủ\n\n"
+        "📌 **CÁCH DÙNG:**\n"
+        "• DDMMYYYY → Xem + LƯU kết quả\n"
+        "• /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
+        "• /dudoan → Dự đoán ngày mai\n"
+        "• /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
     )
 
 @bot.message_handler(commands=['test'])
@@ -192,7 +202,7 @@ def cmd_dt(m):
             datetime(int(y), int(mo), int(d))
             target_date = f"{d}/{mo}/{y}"
         except: pass
-    bot.send_message(m.chat.id, "📊 Đang phân tích dữ liệu...")
+    bot.send_message(m.chat.id, "📊 Đang phân tích 60 ngày gần nhất...")
     rep = gen_prediction(60, target_date)
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
 
@@ -246,7 +256,7 @@ def auto_send():
                 last = today
             time.sleep(30)
         except Exception as e:
-            print(f"Lỗi auto: {e}")
+            print(f"Lỗi tự động gửi: {e}")
             time.sleep(60)
 
 # ====================== 🚀 KHỞI ĐỘNG ======================
@@ -254,20 +264,24 @@ def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI | KHÔNG BỊ TRÙNG")
+    print("🚀 BOT XSMB — ĐÃ ĐIỀN SẴN THÔNG TIN CỦA BẠN")
+    print(f"✅ Chat ID: {CHAT_ID}")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
-    print(f"✅ Chỉ phục vụ Chat ID: {CHAT_ID}")
     print("="*60)
     
+    # ✅ Tắt webhook cũ → tránh xung đột
     bot.remove_webhook()
     time.sleep(3)
     
+    # ✅ Chạy nền
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_send, daemon=True).start()
     
     print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
+    print("⚠️ NẾU BỊ BOT KHÁC TRẢ LỜI → LẤY TOKEN MỚI TỪ @BotFather")
     print("="*60)
     
+    # ✅ Polling đơn luồng → không lỗi
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
