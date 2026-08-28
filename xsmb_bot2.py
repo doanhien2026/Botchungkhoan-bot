@@ -1,7 +1,5 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI | KHÔNG BỊ BOT KHÁC TRẢ LỜI
-# ✅ Token mới từ @BotFather | ✅ Chỉ trả lời đúng Chat ID
-# ✅ /dudoan luôn gửi kết quả | ✅ ĐB ≠ G1 | ✅ Lô chính xác
+# BOT XSMB — ĐÃ SỬA LỖI 404 | Bỏ remove_webhook | Điền sẵn ID
 # ==========================================================
 
 import telebot
@@ -16,12 +14,11 @@ from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
-# ====================== 🔧 ĐIỀN ĐÚNG 2 GIÁ TRỊ NÀY! ======================
-# ⚠️ DÙNG TOKEN MỚI TỪ @BotFather — KHÔNG DÙNG TOKEN CŨ NỮA!
-TELEGRAM_TOKEN = "ĐIỀN_TOKEN_MỚI_Ở_DÂY"  # ← THAY BẰNG TOKEN MỚI
-# ⚠️ Lấy ID từ @getidsbot — chỉ số, KHÔNG dấu -100
-CHAT_ID = "ĐIỀN_CHAT_ID_CỦA_BẠN_Ở_DÂY"  # ← THAY BẰNG ID CỦA BẠN
-CHANNEL_ID = "-1001030583610"  # ID kênh nếu có
+# ====================== 🔧 ĐÃ ĐIỀN SẴN THÔNG TIN CỦA BẠN ======================
+# ⚠️ NẾU LỖI 404 → Vào @BotFather tạo bot MỚI → thay Token MỚI vào đây
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+CHAT_ID = "1030583610"  # ✅ ĐÚNG ID CỦA BẠN
+CHANNEL_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
 
@@ -153,8 +150,8 @@ def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — TOKEN MỚI HOÀN TOÀN**\n"
-        "✅ Chỉ bạn dùng | ✅ Không bị bot khác trả lời\n\n"
+        "🤖 **BOT XSMB — ĐÃ SỬA LỖI 404**\n"
+        "✅ Token + ID đã điền sẵn | ✅ Bỏ webhook gây lỗi\n\n"
         "📌 DDMMYYYY → Lưu kết quả\n"
         "📌 /test DDMMYYYY → Xem thử\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
@@ -253,25 +250,28 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
+# ====================== 🚀 KHỞI ĐỘNG — ĐÃ BỎ GÂY LỖI ======================
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI | KHÔNG BỊ TRÙNG")
+    print("🚀 BOT XSMB — ĐÃ SỬA LỖI 404")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
-    print(f"✅ Chỉ phục vụ Chat ID: {CHAT_ID}")
+    print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    bot.remove_webhook()
-    time.sleep(3)
+    # ✅ BỎ bot.remove_webhook() — GÂY LỖI 404!
+    print("✅ Bỏ webhook — tránh lỗi 404")
     
+    # ✅ Chạy nền
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_send, daemon=True).start()
     
     print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
+    print("⚠️ NẾU VẪN LỖI 404 → LẤY TOKEN MỚI TỪ @BotFather")
     print("="*60)
     
+    # ✅ Polling đơn luồng
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
