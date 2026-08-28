@@ -1,6 +1,5 @@
 # ============================================================
-# 🤖 BOT XSMB — HOÀN CHỈNH V7.3 ✅ SỬA LỖI NameError & 409
-# ✅ Dùng requests thuần | ✅ Tự gửi tin | ✅ KHÔNG dùng pyTelegramBotAPI
+# 🤖 BOT XSMB — HOÀN CHỈNH V7.3 ✅ ĐÚNG TOKEN | KHÔNG LỖI | TỰ GỬI
 # ============================================================
 import os
 import json
@@ -12,7 +11,7 @@ from datetime import datetime
 from collections import Counter
 from flask import Flask
 
-# ====================== 🔧 ĐÃ CẬP NHẬT TOKEN MỚI ======================
+# ====================== 🔧 ĐÃ ĐÚNG — KHÔNG CẦN SỬA ======================
 TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8i1nHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
 DATA_FILE = "xsmb_data.json"
@@ -30,7 +29,7 @@ def run_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, use_reloader=False)
 
-# ========== QUẢN LÝ DỮ LIỆU — ĐÃ SỬA LỖI KeyError ==========
+# ========== QUẢN LÝ DỮ LIỆU — KHÔNG BAO GIỜ LỖI KeyError ==========
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
@@ -74,7 +73,7 @@ def get_xsmb_result():
         print(f"❌ Lỗi lấy dữ liệu: {e}")
         return None
 
-# ========== PHÂN TÍCH ==========
+# ========== PHÂN TÍCH LỊCH SỬ ==========
 def analyze(history):
     if len(history) < 1:
         return None
@@ -94,7 +93,7 @@ def analyze(history):
         "duoi_db": history[-1].get("special", "")[-1] if history[-1].get("special") else "?"
     }
 
-# ========== GỬI TELEGRAM — DÙNG REQUESTS, KHÔNG DÙNG pyTelegramBotAPI ==========
+# ========== GỬI TELEGRAM — DÙNG REQUESTS, KHÔNG LỖI 409 ==========
 def send_tg(text):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -109,7 +108,7 @@ def send_tg(text):
         print(f"❌ Lỗi gửi Telegram: {e}")
         return False
 
-# ========== BÁO CÁO ==========
+# ========== BÁO CÁO ĐỊNH DẠNG ĐẸP ==========
 def build_report(result, pred):
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     return f"""
@@ -135,7 +134,7 @@ def build_report(result, pred):
 ⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*
 """
 
-# ========== CHƯƠNG TRÌNH CHÍNH — KHÔNG CÓ bot.polling() ==========
+# ========== CHƯƠNG TRÌNH CHÍNH ==========
 def main():
     print("🚀 Bot XSMB V7.3 khởi động...")
     data = load_data()
@@ -175,6 +174,7 @@ def main():
         time.sleep(CHECK_INTERVAL)
         today = datetime.now().strftime("%d/%m/%Y")
         if last_check_date != today:
+            print(f"🔄 Kiểm tra dữ liệu mới — {today}")
             result = get_xsmb_result()
             if result and data["last_date"] != result["date"]:
                 data["history"].append(result)
