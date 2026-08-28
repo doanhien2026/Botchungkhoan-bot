@@ -8,15 +8,12 @@ from flask import Flask
 from threading import Thread
 from collections import Counter
 
-# ====================== 🔧 CẤU HÌNH ======================
-TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+# ====================== 🔧 ĐÃ CẬP NHẬT TOKEN MỚI ======================
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8i1nHCHRaDUedA1ra1p0gPWda8"
 CHAT_ID = "1030583610"
-CHANNEL_ID = "-1001030583610"
-PORT = 10000
 DATA_FILE = "xsmb_data.json"
-
-app = Flask(__name__)
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+CHECK_INTERVAL = 3600
+# ============================================================================
 
 # ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_all_data():
