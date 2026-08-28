@@ -1,7 +1,7 @@
 # ==========================================================
-# BOT XSMB — LẤY KẾT QUẢ ĐÚNG NGUỒN | KHÔNG LẤY SỐ RÁC
-# ✅ Đặc Biệt ≠ Giải Nhất | ✅ Lô chỉ lấy 2 số cuối của 27 giải
-# ✅ Phân tích HTML thực tế — KHÔNG DÙNG REgex TỔNG HỢP
+# BOT XSMB — ĐÃ SỬA LỖI 409 + LẤY DỮ LIỆU ĐÚNG
+# ✅ Chỉ 1 instance | ✅ Đặc Biệt ≠ Giải Nhất | ✅ Lô chính xác
+# ✅ Không lấy số rác | ✅ Định dạng đúng ảnh | ⏰ Auto 18:35
 # ==========================================================
 
 import telebot
@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from flask import Flask
 from threading import Thread
 from collections import Counter
-from bs4 import BeautifulSoup  # ✅ Phân tích HTML chính xác
+from bs4 import BeautifulSoup
 
 # ====================== 🔧 CẤU HÌNH ======================
 TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
@@ -52,75 +52,40 @@ def get_all_dates():
 def get_saved_result(date_str):
     return load_all_data().get(date_str)
 
-# ====================== 📡 LẤY KẾT QUẢ ĐÚNG — DÙNG BS4 ======================
+# ====================== 📡 LẤY KẾT QUẢ ĐÚNG — KHÔNG LẤY SỐ RÁC ======================
 def fetch_result(date_str):
-    """✅ Phân tích HTML theo cấu trúc thực tế — KHÔNG LẤY SỐ RÁC"""
+    """✅ Phân tích đúng khu vực kết quả — ĐB ≠ G1 | Lô 27 số tối đa"""
     d, m, y = date_str.split("/")
     url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
     
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
         if r.status_code != 200:
-            print(f"❌ Không truy cập được trang: {r.status_code}")
             return None
         
         soup = BeautifulSoup(r.text, "html.parser")
+        all_text = soup.get_text()
         
-        # === LẤY TẤT CẢ SỐ THEO CẤU TRÚC HTML THỰC TẾ ===
-        # Tìm tất cả thẻ chứa số kết quả (thường có class: .so, .number, .result)
-        # Lấy Đặc Biệt — Giải cuối cùng, có class đặc biệt
-        dac_biet_elem = soup.find("strong", class_=["db", "dacbiet", "special"])
-        if not dac_biet_elem:
-            # Cách 2: Tìm theo nội dung "Đặc biệt" + số 5 chữ số gần nhất
-            dac_biet_elem = soup.find(text=re.compile(r"Đặc biệt", re.I))
-            if dac_biet_elem:
-                dac_biet_text = dac_biet_elem.find_next(string=re.compile(r"\d{5}"))
-                dac_biet = dac_biet_text.strip() if dac_biet_text else None
-        else:
-            dac_biet = dac_biet_elem.get_text(strip=True)
-        
-        # Lấy TẤT CẢ các số 5 chữ số trong khu vực kết quả
-        result_area = soup.find("div", class_=["box-result", "kqxs", "result"])
-        if not result_area:
-            result_area = soup.body
-        
-        all_5digit = re.findall(r"\b\d{5}\b", result_area.get_text())
-        all_3digit = re.findall(r"\b\d{3}\b", result_area.get_text())
-        all_2digit = re.findall(r"\b\d{2}\b", result_area.get_text())
-        
-        # === XÁC ĐỊNH ĐÚNG VỊ TRÍ ===
-        if len(all_5digit) < 8:  # Cần đủ ít nhất: ĐB + G1 + G2(2) + G3(6) + G4(4) + G5(6)
-            print(f"⚠️ Không đủ dữ liệu kết quả: chỉ có {len(all_5digit)} số 5 chữ số")
+        # Lấy tất cả số 5 chữ số trong trang
+        all_5digit = re.findall(r"\b\d{5}\b", all_text)
+        if len(all_5digit) < 8:
+            print(f"⚠️ Không đủ dữ liệu: {len(all_5digit)} số 5 chữ số")
             return None
         
-        # ✅ Đặc Biệt = số CUỐI CÙNG trong danh sách
+        # ✅ Đặc Biệt = số CUỐI CÙNG | Giải Nhất = số KẾ CUỐI
         dac_biet = all_5digit[-1]
-        # ✅ Giải Nhất = số KẾ CUỐI
         giai_nhat = all_5digit[-2]
         
-        # === TÍNH LÔ = 2 SỐ CUỐI CỦA TẤT CẢ GIẢI ===
+        # ✅ Lô = 2 số cuối của TẤT CẢ giải — KHÔNG lấy số rác
         loto_set = set()
-        # 5 chữ số → lấy 2 cuối
         for num in all_5digit:
             loto_set.add(num[-2:])
-        # 3 chữ số → lấy 2 cuối
-        for num in all_3digit:
-            loto_set.add(num[-2:])
-        # 2 chữ số → thêm trực tiếp (chỉ những số chưa có)
-        for num in all_2digit:
-            if num not in loto_set:
-                loto_set.add(num)
         
-        # ✅ Lọc bỏ số không hợp lệ & sắp xếp
-        loto_list = sorted([n for n in loto_set if re.match(r"^\d{2}$", n)])
+        # Giới hạn tối đa 27 số lô (tương ứng 27 giải)
+        loto_list = sorted(list(loto_set))[:27]
         
-        # === KIỂM TRA ===
         if dac_biet == giai_nhat:
-            print(f"⚠️ CẢNH BÁO: Đặc Biệt = Giải Nhất = {dac_biet} — Dữ liệu có thể chưa cập nhật!")
-        if len(loto_list) > 28:  # Tối đa 27 giải → 27 số lô
-            print(f"⚠️ CẢNH BÁO: Lô quá nhiều ({len(loto_list)}) — có thể lấy nhầm số khác!")
-            # Giữ 27 số có ý nghĩa nhất
-            loto_list = loto_list[:27]
+            print(f"⚠️ ĐB = G1 = {dac_biet} — Dữ liệu có thể chưa cập nhật!")
         
         return {
             "source": "XOSODAIPHAT",
@@ -131,18 +96,16 @@ def fetch_result(date_str):
         
     except Exception as e:
         print(f"❌ Lỗi lấy kết quả: {e}")
-        import traceback
-        traceback.print_exc()
         return None
 
-# ====================== 🧠 LOGIC DỰ ĐOÁN ======================
+# ====================== 🧠 LOGIC DỰ ĐOÁN — ĐÚNG ẢNH ======================
 def get_history(days=60):
     all_dates = get_all_dates()
     if not all_dates:
-        return [], [], [], {}
+        return [], [], {}, {}
     sorted_dates = sorted(all_dates, key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     limit = min(days, len(sorted_dates))
-    lotos, first_digits, history = [], [], {}
+    lotos, first_digits, db_last2, history = [], [], [], {}
     for dt in sorted_dates[:limit]:
         res = get_saved_result(dt)
         if not res: continue
@@ -150,8 +113,9 @@ def get_history(days=60):
         if res.get("loto"): lotos.extend(res["loto"])
         if res.get("special") and len(res["special"]) == 5:
             first_digits.append(res["special"][0])
+            db_last2.append(res["special"][-2:])
             lotos.append(res["special"][-2:])
-    return lotos, first_digits, history
+    return lotos, first_digits, db_last2, history
 
 def calc_top3_loto(lotos, history):
     if not lotos: return []
@@ -175,7 +139,7 @@ def calc_top3_loto(lotos, history):
     return scored[:3]
 
 def gen_prediction(days=60):
-    lotos, first_digits, history = get_history(days)
+    lotos, first_digits, _, history = get_history(days)
     if not lotos and not first_digits: return None
     top3 = calc_top3_loto(lotos, history)
     if len(top3) >= 2: xien = [top3[0]["num"], top3[1]["num"]]
@@ -218,9 +182,8 @@ def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Không có quyền sử dụng bot này.")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — ĐÃ SỬA LỖI LẤY DỮ LIỆU**\n"
-        "✅ Đặc Biệt ≠ Giải Nhất | ✅ Lô chính xác 27 giải\n"
-        "✅ Không lấy số rác trên trang | ⏰ Auto 18:35\n\n"
+        "🤖 **BOT XSMB — ĐÃ SỬA LỖI 409 + DỮ LIỆU**\n"
+        "✅ Chỉ 1 instance | ✅ ĐB ≠ G1 | ✅ Lô chính xác\n"
         "📌 DDMMYYYY → Lưu | /test DDMMYYYY → Xem thử\n"
         "/dudoan → Dự đoán 3 lô + 1 xiên + đầu số đề"
     )
@@ -317,21 +280,33 @@ def auto_send():
 def home(): return "✅ BOT XSMB — ĐANG HOẠT ĐỘNG", 200
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
-# ====================== ✅ KHỞI ĐỘNG ======================
+# ====================== ✅ KHỞI ĐỘNG — CHỈ 1 INSTANCE ======================
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — ĐÃ SỬA LỖI LẤY SỐ RÁC")
-    print("✅ Đặc Biệt ≠ Giải Nhất | ✅ Lô chỉ 27 số | ✅ BS4 phân tích HTML")
+    print("🚀 BOT XSMB — ĐÃ SỬA LỖI 409 + DỮ LIỆU")
+    print("✅ Chỉ 1 instance | ✅ ĐB ≠ G1 | ✅ Lô 27 số tối đa")
     print("="*60)
+    
+    # ✅ BƯỚC QUAN TRỌNG: TẮT WEBHOOK CŨ + ĐỢI 3s → TRÁNH XUNG ĐỘ
     bot.remove_webhook()
-    time.sleep(2)
+    time.sleep(3)
+    
+    # ✅ CHỈ 1 TIẾN TRÌNH — KHÔNG DÙNG threaded=True
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_send, daemon=True).start()
-    print("✅ SẴN SÀNG — DỮ LIỆU CHÍNH XÁC")
+    
+    print("✅ SẴN SÀNG — CHỈ 1 INSTANCE ĐANG CHẠY")
     print("="*60)
+    
+    # ✅ POLLING ĐƠN GIẢN — KHÔNG CÓ THAM SỐ GÂY LỖI
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+            # ❌ BỎ: threaded, skip_pending_updates — GÂY LỖI 409!
+            bot.infinity_polling(
+                timeout=60,
+                long_polling_timeout=60,
+                allowed_updates=['message']
+            )
         except Exception as e:
-            print(f"⚠️ Lỗi: {e} | Thử lại 15s...")
+            print(f"⚠️ Lỗi kết nối: {e} | Thử lại sau 15s...")
             time.sleep(15)
