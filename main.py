@@ -1,5 +1,6 @@
 # ==========================================================
-# BOT XSMB — main.py | ĐÃ SỬA LỖI 404 | Điền sẵn Token + ID
+# BOT XSMB — TOKEN MỚI HOÀN TOÀN | KHÔNG BỊ BOT KHÁC TRẢ LỜI
+# ✅ Token mới: 8933441659:... | ✅ Chat ID: 1030583610
 # ==========================================================
 
 import telebot
@@ -14,8 +15,8 @@ from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
-# ====================== 🔧 ĐÃ ĐIỀN SẴN — KHÔNG ĐỂ TRỐNG ======================
-TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+# ====================== 🔧 ĐÃ ĐIỀN SẴN — KHÔNG CẦN SỬA ======================
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
 CHAT_ID = "1030583610"
 CHANNEL_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
@@ -149,10 +150,10 @@ def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — ĐÃ SỬA LỖI 404**\n"
-        "✅ Token + ID đã điền sẵn | ✅ Không bị bot khác trả lời\n\n"
-        "📌 DDMMYYYY → Lưu kết quả\n"
-        "📌 /test DDMMYYYY → Xem thử\n"
+        "🤖 **BOT XSMB — TOKEN MỚI HOÀN TOÀN**\n"
+        "✅ Không còn bị bot khác trả lời | ✅ ĐB ≠ G1\n\n"
+        "📌 DDMMYYYY → Xem + LƯU kết quả\n"
+        "📌 /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
         "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
     )
@@ -192,7 +193,7 @@ def cmd_dt(m):
             datetime(int(y), int(mo), int(d))
             target_date = f"{d}/{mo}/{y}"
         except: pass
-    bot.send_message(m.chat.id, "📊 Đang phân tích dữ liệu...")
+    bot.send_message(m.chat.id, "📊 Đang phân tích 60 ngày gần nhất...")
     rep = gen_prediction(60, target_date)
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
 
@@ -254,12 +255,12 @@ def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — main.py | ĐÃ SỬA LỖI 404")
+    print("🚀 BOT XSMB — TOKEN MỚI HOÀN TOÀN")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ BỎ remove_webhook() — KHÔNG GÂY LỖI 404 NỮA
+    # ✅ Bỏ webhook — tránh lỗi 404
     print("✅ Đã bỏ webhook — tránh lỗi 404")
     
     # ✅ Chạy nền
@@ -267,7 +268,6 @@ if __name__ == "__main__":
     Thread(target=auto_send, daemon=True).start()
     
     print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
-    print("⚠️ NẾU VẪN LỖI → LẤY TOKEN MỚI TỪ @BotFather")
     print("="*60)
     
     # ✅ Polling đơn luồng
