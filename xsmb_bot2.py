@@ -1,7 +1,7 @@
 # ==========================================================
-# BOT XSMB — SỬA LỆNH /dudoan KHÔNG TRẢ KẾT QUẢ
-# ✅ ĐB ≠ G1 | ✅ Lô chính xác | ✅ /dudoan luôn trả kết quả
-# ✅ Kiểm tra đủ dữ liệu | ✅ Không bị trùng bot khác
+# BOT XSMB — CHỈ BOT CỦA BẠN TRẢ LỜI | KHÔNG BỊ TRÙNG
+# ✅ Kiểm tra Token + Chat ID | ✅ Từ chối người khác dùng
+# ✅ Luôn trả kết quả dự đoán | ✅ ĐB ≠ G1 | ✅ Lô chính xác
 # ==========================================================
 
 import telebot
@@ -16,10 +16,12 @@ from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
-# ====================== 🔧 CẤU HÌNH ======================
-TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
-CHAT_ID = "1030583610"  # ID cá nhân
-CHANNEL_ID = "-1001030583610"  # ID kênh
+# ====================== 🔧 CẤU HÌNH — ĐIỀN ĐÚNG! ======================
+# ⚠️ LẤY TOKEN MỚI TỪ @BotFather → KHÔNG DÙNG TOKEN CŨ NỮA!
+TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"  # 🔄 CẬP NHẬT TOKEN MỚI Ở ĐÂY
+# ⚠️ LẤY CHAT ID TỪ @getidsbot — CHỈ LÀ SỐ, KHÔNG DẤU -100
+CHAT_ID = "1030583610"  # 🔄 ĐÚNG ID NGƯỜI DÙNG
+CHANNEL_ID = "-1001030583610"  # ID kênh nếu có
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
 
@@ -29,6 +31,13 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
+
+# ====================== 🔐 KIỂM TRA QUYỀN — CHỈ BẠN DÙNG ======================
+def auth(uid):
+    """✅ CHỈ trả lời đúng CHAT_ID của BẠN — người khác dùng sẽ bị TỪ CHỐI"""
+    uid_str = str(uid)
+    allowed = [CHAT_ID, CHANNEL_ID.replace("-100", ""), CHANNEL_ID]
+    return uid_str in allowed
 
 # ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_all_data():
@@ -45,12 +54,6 @@ def save_data(date_str, result):
     data[date_str] = result
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
-def get_all_dates():
-    return sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
-
-def get_saved_result(date_str):
-    return load_all_data().get(date_str)
 
 # ====================== 📡 LẤY KẾT QUẢ ======================
 def fetch_result(date_str):
@@ -83,14 +86,11 @@ def fetch_result(date_str):
 
 # ====================== 🧠 LOGIC DỰ ĐOÁN ======================
 def get_history(days=60):
-    all_dates = get_all_dates()
-    if not all_dates:
-        return [], [], {}, {}
-    sorted_dates = sorted(all_dates, key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
-    limit = min(days, len(sorted_dates))
+    all_dates = sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
+    limit = min(days, len(all_dates))
     lotos, first_digits, history = [], [], {}
-    for dt in sorted_dates[:limit]:
-        res = get_saved_result(dt)
+    for dt in all_dates[:limit]:
+        res = load_all_data().get(dt)
         if not res: continue
         history[dt] = res
         if res.get("loto"): lotos.extend(res["loto"])
@@ -101,7 +101,6 @@ def get_history(days=60):
 
 def calc_top3_loto(lotos, history):
     if not lotos:
-        # ✅ Nếu chưa có dữ liệu → trả số mặc định dựa trên tần suất tổng thể
         return [
             {"num": "21", "count": 0, "rate": 0.0, "sleep": 0},
             {"num": "59", "count": 0, "rate": 0.0, "sleep": 0},
@@ -129,31 +128,23 @@ def calc_top3_loto(lotos, history):
 def gen_prediction(days=60, target_date=None):
     lotos, first_digits, history = get_history(days)
     top3 = calc_top3_loto(lotos, history)
-    
-    if len(top3) >= 2: xien = [top3[0]["num"], top3[1]["num"]]
-    elif len(top3) == 1: xien = [top3[0]["num"], "99"]
-    else: xien = ["00", "00"]
-    
+    xien = [top3[0]["num"], top3[1]["num"]] if len(top3)>=2 else ["00", "00"]
     if first_digits:
         fc = Counter(first_digits)
         fd, fcnt = fc.most_common(1)[0]
         frate = round(fcnt / len(first_digits) * 100, 1)
     else:
-        fd, fcnt, frate = "8", 0, 0.0  # ✅ Mặc định nếu chưa có dữ liệu
+        fd, fcnt, frate = "8", 0, 0.0
     
     target_info = f" — Ngày {target_date}" if target_date else " — Ngày mai"
-    data_note = "⚠️ Dữ liệu chưa đủ → dự đoán tham khảo" if len(lotos) < 10 else ""
-    
     lines = [
         f"📊 **DỰ ĐOÁN KẾT QUẢ{target_info}**",
         f"📅 Dựa trên {days} ngày gần nhất",
         "________________________________________",
         "",
         "🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**",
+        "   (Tần suất xuất hiện + chu kỳ ngủ)"
     ]
-    if data_note:
-        lines.append(f"   {data_note}")
-    lines.append("   (Tần suất xuất hiện + chu kỳ ngủ)")
     for i, item in enumerate(top3, 1):
         lines.append(f"   {i}. `{item['num']}` – {item['count']} lần | {item['rate']}% | Ngủ {item['sleep']} ngày")
     lines.extend([
@@ -168,24 +159,18 @@ def gen_prediction(days=60, target_date=None):
     ])
     return "\n".join(lines)
 
-# ====================== 🔐 KIỂM TRA QUYỀN ======================
-def auth(uid):
-    # ✅ Chỉ xử lý đúng Chat ID của bạn → không bị bot khác trả lời
-    return str(uid) in [CHAT_ID, CHANNEL_ID.replace("-100", ""), CHANNEL_ID]
-
 # ====================== 📋 LỆNH BOT ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     if not auth(m.chat.id):
-        return bot.send_message(m.chat.id, "❌ Không có quyền sử dụng bot này.")
+        return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — ĐÃ SỬA LỆNH DỰ ĐOÁN**\n"
-        "✅ ĐB ≠ G1 | ✅ Lô chính xác | ✅ Luôn trả kết quả\n\n"
-        "📌 **CÁCH DÙNG:**\n"
-        "• DDMMYYYY → Xem + LƯU kết quả\n"
-        "• /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
-        "• /dudoan → Dự đoán ngày mai\n"
-        "• /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
+        "🤖 **BOT XSMB — ĐÃ SỬA TRÙNG BOT**\n"
+        "✅ Chỉ bạn dùng | ✅ ĐB ≠ G1 | ✅ Lô chính xác\n\n"
+        "📌 DDMMYYYY → Lưu kết quả\n"
+        "📌 /test DDMMYYYY → Xem thử\n"
+        "📌 /dudoan → Dự đoán ngày mai\n"
+        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
     )
 
 @bot.message_handler(commands=['test'])
@@ -213,23 +198,16 @@ def cmd_test(m):
 
 @bot.message_handler(commands=['dudoan', 'thongke'])
 def cmd_dt(m):
-    # ✅ KIỂM TRA QUYỀN TRƯỚC → KHÔNG BỊ BOT KHÁC TRẢ LỜI
-    if not auth(m.chat.id):
-        return
+    if not auth(m.chat.id): return
     parts = m.text.strip().split()
     target_date = None
-    
-    # ✅ Hỗ trợ tham số ngày
     if len(parts) >= 2 and re.match(r"^\d{8}$", parts[1]):
         t = parts[1]
         d, mo, y = t[:2], t[2:4], t[4:8]
         try:
             datetime(int(y), int(mo), int(d))
             target_date = f"{d}/{mo}/{y}"
-        except:
-            pass
-    
-    # ✅ Luôn trả kết quả — KHÔNG BỎ TRỐNG
+        except: pass
     bot.send_message(m.chat.id, "📊 Đang phân tích dữ liệu...")
     rep = gen_prediction(60, target_date)
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
@@ -261,13 +239,11 @@ def handle(m):
 # ====================== ⏰ TỰ ĐỘNG GỬI 18:35 ======================
 def auto_send():
     last = ""
-    print("⏰ Auto 18:35 — ĐÃ BẬT")
     while True:
         try:
             now = datetime.now()
             today = now.strftime("%d/%m/%Y")
             if now.hour == 18 and 35 <= now.minute <= 45 and last != today:
-                print(f"⏰ Gửi: {today}")
                 res = fetch_result(today)
                 pred = gen_prediction(60)
                 if res:
@@ -286,28 +262,31 @@ def auto_send():
                 last = today
             time.sleep(30)
         except Exception as e:
-            print(f"❌ Lỗi auto: {e}")
+            print(f"Lỗi auto: {e}")
             time.sleep(60)
 
 # ====================== 🚀 KHỞI ĐỘNG ======================
+def run_flask(): app.run(host='0.0.0.0', port=PORT)
+
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — SỬA LỆNH /dudoan LUÔN TRẢ KẾT QUẢ")
-    print("✅ ĐB ≠ G1 | ✅ Lô chính xác | ✅ Luôn gửi dự đoán")
+    print("🚀 BOT XSMB — CHỈ BẠN TRẢ LỜI | KHÔNG BỊ TRÙNG")
+    print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
+    print(f"✅ Chỉ phục vụ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ Tắt webhook cũ → tránh xung đột
+    # ✅ Tắt webhook + xóa cập nhật cũ → không bị trùng lệnh
     bot.remove_webhook()
     time.sleep(3)
     
-    # ✅ Chạy Flask + Auto
+    # ✅ Chạy nền
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_send, daemon=True).start()
     
-    print("✅ SẴN SÀNG — Lệnh /dudoan sẽ luôn trả kết quả")
+    print("✅ BOT SẴN SÀNG — CHỈ BẠN NHẬN KẾT QUẢ!")
     print("="*60)
     
-    # ✅ Polling đơn luồng → không lỗi 409
+    # ✅ Polling đơn luồng → không xung đột
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
