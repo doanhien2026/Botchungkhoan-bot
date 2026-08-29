@@ -1,5 +1,5 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot
+# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot | SỬA LỖI 409
 # ==========================================================
 import telebot
 import re
@@ -12,7 +12,14 @@ from flask import Flask
 from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
-from config import TELEGRAM_TOKEN, CHAT_ID, CHANNEL_ID, DATA_FILE, PORT
+from telebot.apihelper import ApiTelegramException
+
+# ====================== 🔧 CẤU HÌNH ======================
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
+CHAT_ID = "1030583610"
+CHANNEL_ID = "-1001030583610"
+PORT = int(os.environ.get("PORT", 10000))
+DATA_FILE = "xsmb_data.json"
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -21,9 +28,11 @@ HEADERS = {
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
+# ====================== 🔐 XÁC THỰC ======================
 def auth(uid):
     return str(uid) == str(CHAT_ID) or str(uid) == CHANNEL_ID
 
+# ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
@@ -37,6 +46,7 @@ def save_data(date_str, result):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# ====================== 📡 LẤY KẾT QUẢ ======================
 def fetch_result(date_str):
     d, m, y = date_str.split("/")
     url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
@@ -56,9 +66,10 @@ def fetch_result(date_str):
             "loto": sorted(list(loto_set))[:27]
         }
     except Exception as e:
-        print(f"Lỗi: {e}")
+        print(f"Lỗi fetch: {e}")
         return None
 
+# ====================== 🧠 DỰ ĐOÁN ======================
 def get_history(days=60):
     all_dates = sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     limit = min(days, len(all_dates))
@@ -116,29 +127,30 @@ def gen_prediction(days=60, target_date=None):
         "________________________________________",
         "",
         "🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**",
-        "   (Tần suất xuất hiện + chu kỳ ngủ)"
+        "   (Tần suất + chu kỳ ngủ)"
     ]
     for i, item in enumerate(top3, 1):
         lines.append(f"   {i}. `{item['num']}` – {item['count']} lần | {item['rate']}% | Ngủ {item['sleep']} ngày")
     lines.extend([
         "",
         "🔀 **1 CẶP LÔ XIÊN:**",
-        f"   → Kết hợp 2 con cao nhất: `{xien[0]} – {xien[1]}`",
+        f"   → `{xien[0]} – {xien[1]}`",
         "",
         "🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**",
-        f"   → Đầu số `{fd}` – xuất hiện {fcnt} lần → {frate}%",
+        f"   → Đầu số `{fd}` – {fcnt} lần → {frate}%",
         "",
         "⚠️ *Chỉ tham khảo – Chơi có trách nhiệm!*"
     ])
     return "\n".join(lines)
 
+# ====================== 📋 LỆNH BOT ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
         "🤖 **BOT XSMB — TOKEN MỚI CHÍNH THỨC**\n"
-        "✅ Bot: @Thongkeso999_bot\n\n"
+        "✅ Bot: @Thongkeso999_bot | ✅ Đã sửa lỗi 409\n\n"
         "📌 DDMMYYYY → Xem + LƯU kết quả\n"
         "📌 /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
@@ -208,6 +220,7 @@ def handle(m):
     rep += "\n⚠️ Chơi có trách nhiệm!"
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
 
+# ====================== ⏰ TỰ ĐỘNG GỬI 18:35 ======================
 def auto_send():
     last = ""
     while True:
@@ -236,25 +249,43 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
+# ====================== 🚀 KHỞI ĐỘNG — SỬA LỖI 409 ======================
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI CHÍNH THỨC")
+    print("🚀 BOT XSMB — TOKEN MỚI | SỬA LỖI 409")
     print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
+    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT 409
+    bot.remove_webhook()
+    print("✅ Đã xóa webhook — tránh xung đột")
+    
+    # ✅ Chạy Flask nền
     Thread(target=run_flask, daemon=True).start()
+    print("✅ Flask server đã khởi động")
+    
+    # ✅ Chạy auto-job nền
     Thread(target=auto_send, daemon=True).start()
+    print("✅ Auto-job đã khởi động")
     
     print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
+    print("⚠️ CHỈ 1 INSTANCE — TRÁNH LỖI 409")
     print("="*60)
     
+    # ✅ POLLING ĐƠN LUỒNG — KHÔNG DÙNG THAM SỐ GÂY LỖI
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+            bot.infinity_polling(timeout=60, long_polling_timeout=60, none_stop=True)
+        except ApiTelegramException as e:
+            if e.error_code == 409:
+                print("❌ LỖI 409 — Phát hiện phiên bản khác đang chạy!")
+                print("💡 Xóa dịch vụ cũ trên Render → chỉ giữ 1 bản!")
+            print("⏳ Thử lại sau 10 giây...")
+            time.sleep(10)
         except Exception as e:
-            print(f"⚠️ Lỗi: {e} | Thử lại 15s...")
+            print(f"⚠️ Lỗi: {e} | Thử lại sau 15 giây...")
             time.sleep(15)
