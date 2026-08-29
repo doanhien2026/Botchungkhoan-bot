@@ -1,8 +1,6 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI HOÀN TOÀN | KHÔNG BỊ BOT KHÁC TRẢ LỜI
-# ✅ Token mới: 8933441659:... | ✅ Chat ID: 1030583610
+# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot
 # ==========================================================
-
 import telebot
 import re
 import time
@@ -14,13 +12,7 @@ from flask import Flask
 from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
-
-# ====================== 🔧 ĐÃ ĐIỀN SẴN — KHÔNG CẦN SỬA ======================
-TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
-CHAT_ID = "1030583610"
-CHANNEL_ID = "-1001030583610"
-PORT = int(os.environ.get("PORT", 10000))
-DATA_FILE = "xsmb_data.json"
+from config import TELEGRAM_TOKEN, CHAT_ID, CHANNEL_ID, DATA_FILE, PORT
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -29,11 +21,9 @@ HEADERS = {
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
-# ====================== 🔐 CHỈ BẠN DÙNG ======================
 def auth(uid):
     return str(uid) == str(CHAT_ID) or str(uid) == CHANNEL_ID
 
-# ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
@@ -47,7 +37,6 @@ def save_data(date_str, result):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ====================== 📡 LẤY KẾT QUẢ ======================
 def fetch_result(date_str):
     d, m, y = date_str.split("/")
     url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
@@ -70,7 +59,6 @@ def fetch_result(date_str):
         print(f"Lỗi: {e}")
         return None
 
-# ====================== 🧠 DỰ ĐOÁN ======================
 def get_history(days=60):
     all_dates = sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     limit = min(days, len(all_dates))
@@ -144,14 +132,13 @@ def gen_prediction(days=60, target_date=None):
     ])
     return "\n".join(lines)
 
-# ====================== 📋 LỆNH BOT ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     if not auth(m.chat.id):
         return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — TOKEN MỚI HOÀN TOÀN**\n"
-        "✅ Không còn bị bot khác trả lời | ✅ ĐB ≠ G1\n\n"
+        "🤖 **BOT XSMB — TOKEN MỚI CHÍNH THỨC**\n"
+        "✅ Bot: @Thongkeso999_bot\n\n"
         "📌 DDMMYYYY → Xem + LƯU kết quả\n"
         "📌 /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
@@ -221,7 +208,6 @@ def handle(m):
     rep += "\n⚠️ Chơi có trách nhiệm!"
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
 
-# ====================== ⏰ TỰ ĐỘNG GỬI 18:35 ======================
 def auto_send():
     last = ""
     while True:
@@ -250,27 +236,22 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI HOÀN TOÀN")
+    print("🚀 BOT XSMB — TOKEN MỚI CHÍNH THỨC")
+    print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ Bỏ webhook — tránh lỗi 404
-    print("✅ Đã bỏ webhook — tránh lỗi 404")
-    
-    # ✅ Chạy nền
     Thread(target=run_flask, daemon=True).start()
     Thread(target=auto_send, daemon=True).start()
     
     print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
     print("="*60)
     
-    # ✅ Polling đơn luồng
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
