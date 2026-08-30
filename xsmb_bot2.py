@@ -1,5 +1,5 @@
 # ==========================================================
-# BOT XSMB — V6.8 | ĐƠN LUỒNG TUYỆT ĐỐI | KHÔNG LỖI 409
+# BOT XSMB — V6.9 | HIỂN THỊ NGÀY DỰ ĐOÁN + TỶ LỆ RÕ RÀNG
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Bot: @Thongkeso999_bot
 # ==========================================================
@@ -33,38 +33,48 @@ HEADERS = {
 # ====================== 🌐 TRANG CHỦ ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V6.8 — Đơn luồng tuyệt đối | Không lỗi 409"
+    return "✅ Bot XSMB V6.9 — Ngày dự đoán + Tỷ lệ rõ ràng"
 
-# ====================== 💾 DỮ LIỆU ======================
+# ====================== 💾 DỮ LIỆU — SỬA ĐỌC ĐÚNG ======================
 def load_all_data():
     if not os.path.exists(DATA_FILE):
+        print(f"ℹ️ File {DATA_FILE} chưa tồn tại → Trả về {}")
         return {}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
             if not content:
+                print(f"⚠️ File {DATA_FILE} rỗng")
                 return {}
             data = json.loads(content)
-            return data if isinstance(data, dict) else {}
+            if not isinstance(data, dict):
+                print(f"⚠️ Dữ liệu không phải dict")
+                return {}
+            print(f"✅ Đọc được {len(data)} ngày từ {DATA_FILE}")
+            return data
+    except json.JSONDecodeError as e:
+        print(f"❌ Lỗi JSON: {e}")
+        return {}
     except Exception as e:
-        print(f"⚠️ Lỗi đọc dữ liệu: {e}")
+        print(f"❌ Lỗi đọc: {e}")
         return {}
 
 def save_data(date_str, result):
     data = load_all_data()
     if date_str in data:
+        print(f"⚠️ Ngày {date_str} ĐÃ CÓ — Bỏ qua")
         return False
     data[date_str] = result
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"✅ Đã lưu: {date_str}")
+        print(f"✅ ĐÃ LƯU: {date_str} — Tổng: {len(data)} ngày")
         return True
     except Exception as e:
         print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ====================== 📡 LẤY KẾT QUẢ — ĐA NGUỒN ======================
+# ====================== 📡 LẤY KẾT QUẢ ======================
 def validate_result(special, g1, loto):
     if not special or len(special) != 5 or not special.isdigit():
         return False
@@ -131,73 +141,104 @@ def fetch_result(date_str):
     if result:
         print(f"✅ Lấy từ: {result['source']}")
         return result
+    print("❌ Tất cả nguồn đều thất bại")
     return None
 
-# ====================== 🧠 LOGIC DỰ ĐOÁN 90 NGÀY ======================
+# ====================== 🧠 LOGIC DỰ ĐOÁN — HIỂN THỊ RÕ RÀNG ======================
 def get_history_data(days=ANALYSIS_DAYS):
     data = load_all_data()
-    if not data:
+    if not data or len(data) == 0:
+        print("⚠️ KHÔNG CÓ DỮ LIỆU LỊCH SỬ")
         return [], [], {}, 0
+    
     try:
         sorted_dates = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
-    except:
+    except Exception as e:
+        print(f"❌ Lỗi sắp xếp ngày: {e}")
         return [], [], {}, 0
+    
     limit = min(days, len(sorted_dates))
+    print(f"📊 Phân tích {limit} ngày gần nhất: {sorted_dates[:5]}...")
+    
     all_loto_nums = []
     first_digits = []
     last_appear = {}
+    
     for idx, dt in enumerate(sorted_dates[:limit]):
         res = data[dt]
         day_lotos = set()
+        
         if res.get("loto") and isinstance(res["loto"], list):
             for n in res["loto"]:
                 if isinstance(n, str) and len(n) == 2:
                     day_lotos.add(n)
+        
         special = res.get("special", "")
         if isinstance(special, str) and len(special) == 5:
             day_lotos.add(special[-2:])
             first_digits.append(special[0])
+        
         for num in day_lotos:
             if num not in last_appear:
                 last_appear[num] = idx
+        
         all_loto_nums.extend(day_lotos)
+    
+    print(f"📊 Tổng số lô thu thập: {len(all_loto_nums)} con, {len(set(all_loto_nums))} loại")
     return all_loto_nums, first_digits, last_appear, limit
 
 def calculate_prediction(days=ANALYSIS_DAYS):
     all_loto_nums, first_digits, last_appear, total_days = get_history_data(days)
+    
     if total_days < 1:
         return {
             "ready": False,
-            "note": "⚠️ Chưa có dữ liệu — Vui lòng nhập kết quả DDMMYYYY trước!",
-            "top3": [{"num": "07", "count": 0, "rate": 0.0, "sleep": 0, "score": 0},
-                     {"num": "29", "count": 0, "rate": 0.0, "sleep": 0, "score": 0},
-                     {"num": "56", "count": 0, "rate": 0.0, "sleep": 0, "score": 0}],
-            "xien": ["07", "29"],
-            "first_digit": {"digit": "8", "count": 0, "rate": 0.0},
+            "note": "⚠️ Chưa có dữ liệu lịch sử — Vui lòng nhập kết quả DDMMYYYY trước!",
+            "top3": [
+                {"num": "--", "count": 0, "rate": 0.0, "sleep": 0, "score": 0},
+                {"num": "--", "count": 0, "rate": 0.0, "sleep": 0, "score": 0},
+                {"num": "--", "count": 0, "rate": 0.0, "sleep": 0, "score": 0}
+            ],
+            "xien": ["--", "--"],
+            "first_digit": {"digit": "--", "count": 0, "rate": 0.0},
             "total_days": 0
         }
+    
     freq = Counter(all_loto_nums)
     total_loto = len(all_loto_nums)
+    unique_count = len(freq)
+    
     scored = []
     for num, count in freq.items():
         rate = round(count / total_loto * 100, 2) if total_loto > 0 else 0.0
         sleep_days = last_appear.get(num, 999)
         score = round(count * (1 + 1 / (sleep_days + 1)), 2)
-        scored.append({"num": num, "count": count, "rate": rate, "sleep": sleep_days, "score": score})
+        scored.append({
+            "num": num,
+            "count": count,
+            "rate": rate,
+            "sleep": sleep_days,
+            "score": score
+        })
+    
     scored.sort(key=lambda x: -x["score"])
     top3 = scored[:3]
+    
     while len(top3) < 3:
         top3.append({"num": "--", "count": 0, "rate": 0.0, "sleep": 0, "score": 0})
+    
     xien = [top3[0]["num"], top3[1]["num"]] if top3[0]["num"] != "--" and top3[1]["num"] != "--" else ["00", "00"]
-    fd_result = {"digit": "8", "count": 0, "rate": 0.0}
+    
+    fd_result = {"digit": "--", "count": 0, "rate": 0.0}
     if first_digits:
         fd_freq = Counter(first_digits)
         fd_digit, fd_count = fd_freq.most_common(1)[0]
         fd_rate = round(fd_count / len(first_digits) * 100, 2)
         fd_result = {"digit": fd_digit, "count": fd_count, "rate": fd_rate}
+    
     return {
         "ready": True,
-        "note": f"✅ Dữ liệu {total_days} ngày — {total_loto} số lô phân tích",
+        "note": f"✅ Dữ liệu {total_days} ngày | {total_loto} lần xuất hiện | {unique_count} loại số lô",
         "top3": top3,
         "xien": xien,
         "first_digit": fd_result,
@@ -205,52 +246,74 @@ def calculate_prediction(days=ANALYSIS_DAYS):
     }
 
 def gen_prediction_text(days=ANALYSIS_DAYS, target_date=None):
+    """Tạo nội dung — HIỂN THỊ NGÀY DỰ ĐOÁN + GIẢI THÍCH TỶ LỆ"""
     pred = calculate_prediction(days)
-    target_info = f" — Ngày {target_date}" if target_date else " — Ngày mai"
+    
+    # ✅ Xác định ngày dự đoán
+    if target_date:
+        target_info = f"📅 DỰ ĐOÁN NGÀY: {target_date}"
+    else:
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
+        target_info = f"📅 DỰ ĐOÁN NGÀY MAI: {tomorrow}"
+    
     lines = [
-        f"📊 **DỰ ĐOÁN KẾT QUẢ{target_info}**",
-        f"📅 Phân tích {pred['total_days']} ngày gần nhất",
-        "________________________________________",
+        f"📊 {target_info}",
+        f"📈 Phân tích: {pred['total_days']} ngày gần nhất",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
-        "🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**"
+        "🎯 3 CON LÔ CÓ TỶ LỆ XUẤT HIỆN CAO NHẤT:",
+        "   (Tỷ lệ = Số lần xuất hiện / Tổng số ngày × 100%)"
     ]
+    
     for i, item in enumerate(pred["top3"], 1):
         if item["num"] == "--":
             lines.append(f"   {i}. Chưa đủ dữ liệu")
         else:
-            lines.append(f"   {i}. `{item['num']}` – {item['count']} lần | {item['rate']}% | Ngủ {item['sleep']} ngày")
+            lines.append(
+                f"   {i} • `{item['num']}`  →  {item['count']} lần  |  Tỷ lệ: {item['rate']}%  |  "
+                f"Ngủ: {item['sleep']} ngày trước khi ra gần nhất"
+            )
+    
     lines.extend([
         "",
-        "🔀 **1 CẶP LÔ XIÊN:**",
-        f"   → `{pred['xien'][0]} – {pred['xien'][1]}`",
+        "🔀 1 CẶP LÔ XIÊN (Kết hợp 2 con cao nhất):",
+        f"   → `{pred['xien'][0]}` + `{pred['xien'][1]}`",
         "",
-        "🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**",
-        f"   → Đầu số `{pred['first_digit']['digit']}` – {pred['first_digit']['count']} lần → {pred['first_digit']['rate']}%",
+        "🔢 DỰ KIẾN ĐẦU SỐ GIẢI ĐẶC BIỆT:",
+        f"   → Đầu số `{pred['first_digit']['digit']}`  |  Xuất hiện: {pred['first_digit']['count']} lần  |  Tỷ lệ: {pred['first_digit']['rate']}%",
         "",
         f"ℹ️ {pred['note']}",
-        "⚠️ *Chỉ tham khảo — Chơi có trách nhiệm!*"
+        "",
+        "💡 GIẢI THÍCH TỶ LỆ:",
+        "   • Tỷ lệ % = Số lần xuất hiện trong lịch sử / Tổng ngày phân tích",
+        "   • Ngủ = Số ngày liên tục chưa xuất hiện gần nhất",
+        "   • Ưu tiên số có tỷ lệ cao + vừa ra gần đây",
+        "",
+        "⚠️ Chỉ tham khảo — Chơi có trách nhiệm!"
     ])
+    
     return "\n".join(lines)
 
 # ====================== 📋 LỆNH BOT ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ V6.8**\n"
-        "✅ Đơn luồng tuyệt đối — Không lỗi 409\n"
-        "✅ Nguồn: XOSO.COM.VN + XSDAIPHAT\n"
+        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ V6.9**\n"
+        "✅ Hiển thị rõ ngày dự đoán + Giải thích tỷ lệ\n"
+        "✅ Nguồn: XOSO.COM.VN + XOSODAIPHAT\n"
         f"✅ Phân tích {ANALYSIS_DAYS} ngày lịch sử\n\n"
-        "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
-        "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
+        "📌 Gõ DDMMYYYY → Lưu kết quả ngày đó\n"
+        "📌 /test DDMMYYYY → Xem kết quả, không lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
-        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
+        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định\n"
+        "📌 /dudoan 30082026 → Dự đoán ngày 30/08/2026"
     )
 
 @bot.message_handler(commands=['test'])
 def cmd_test(m):
     parts = m.text.strip().split()
     if len(parts) < 2 or not re.match(r"^\d{8}$", parts[1]):
-        return bot.send_message(m.chat.id, "⚠️ /test DDMMYYYY — VD: /test 28082026")
+        return bot.send_message(m.chat.id, "⚠️ /test DDMMYYYY — VD: /test 29082026")
     t = parts[1]
     d, mo, y = t[:2], t[2:4], t[4:8]
     try:
@@ -271,6 +334,7 @@ def cmd_test(m):
 
 @bot.message_handler(commands=['dudoan', 'thongke'])
 def cmd_dt(m):
+    print(f"✅ LỆNH /dudoan TỪ: {m.chat.id} — Nội dung: {m.text}")
     parts = m.text.strip().split()
     target_date = None
     if len(parts) >= 2 and re.match(r"^\d{8}$", parts[1]):
@@ -281,6 +345,7 @@ def cmd_dt(m):
             target_date = f"{d}/{mo}/{y}"
         except:
             pass
+    
     result_text = gen_prediction_text(ANALYSIS_DAYS, target_date)
     bot.send_message(m.chat.id, result_text, parse_mode="Markdown")
 
@@ -302,9 +367,9 @@ def handle(m):
         return bot.send_message(m.chat.id, f"⚠️ **CHƯA CÓ KẾT QUẢ — {date_str}**\n(Chưa đến giờ quay hoặc lỗi nguồn)")
     saved = save_data(date_str, res)
     if not saved:
-        rep = f"⚠️ **NGÀY {date_str} ĐÃ TỒN TẠI**\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
+        rep = f"⚠️ **NGÀY {date_str} ĐÃ TỒN TẠI — KHÔNG LƯU LẠI**\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
     else:
-        rep = f"📅 **KẾT QUẢ — {date_str}** ✅ ĐÃ LƯU\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
+        rep = f"📅 **KẾT QUẢ — {date_str}** ✅ ĐÃ LƯU MỚI\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
     rep += f"🏆 Đặc Biệt: `{res['special']}`\n"
     rep += f"🥈 Giải Nhất: `{res['g1']}`\n"
     if res.get("loto"):
@@ -321,7 +386,6 @@ def auto_send():
             today = now.strftime("%d/%m/%Y")
             if now.hour == 18 and 35 <= now.minute <= 45 and last != today:
                 res = fetch_result(today)
-                pred = gen_prediction_text(ANALYSIS_DAYS)
                 if res:
                     rep = f"📢 **KẾT QUẢ NGÀY {today}**\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
                     rep += f"🏆 Đặc Biệt: `{res['special']}`\n"
@@ -331,41 +395,36 @@ def auto_send():
                     rep += "⚠️ Chơi có trách nhiệm!"
                     bot.send_message(CHANNEL_ID, rep, parse_mode="Markdown")
                     save_data(today, res)
-                if pred:
-                    d, m, y = today.split("/")
-                    tom = (datetime(int(y), int(m), int(d)) + timedelta(days=1)).strftime("%d/%m/%Y")
-                    bot.send_message(CHANNEL_ID, f"🔮 **DỰ ĐOÁN NGÀY {tom}**\n\n{pred}", parse_mode="Markdown")
+                
+                d, m, y = today.split("/")
+                tom = (datetime(int(y), int(m), int(d)) + timedelta(days=1)).strftime("%d/%m/%Y")
+                pred_text = gen_prediction_text(ANALYSIS_DAYS, tom)
+                bot.send_message(CHANNEL_ID, f"🔮 {pred_text}", parse_mode="Markdown")
                 last = today
             time.sleep(30)
         except Exception as e:
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG — ĐƠN LUỒNG TUYỆT ĐỐI ======================
+# ====================== 🚀 KHỞI ĐỘNG ======================
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — V6.8 | ĐƠN LUỒNG TUYỆT ĐỐI | KHÔNG LỖI 409")
-    print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
+    print("🚀 BOT XSMB — V6.9 | NGÀY DỰ ĐOÁN + TỶ LỆ RÕ RÀNG")
     print("="*60)
     
-    # ✅ XÓA WEBHOOK TRƯỚC
     bot.remove_webhook()
     print("✅ Đã xóa webhook")
     
-    # ✅ CHẠY FLASK — ĐƠN LUỒNG, KHÔNG DÙNG THREAD
     from threading import Thread
     def run_flask():
         app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
     Thread(target=run_flask, daemon=True).start()
     print("✅ Flask server đã chạy")
     
-    # ✅ CHẠY AUTO JOB
     Thread(target=auto_send, daemon=True).start()
     print("✅ Auto-job đã chạy")
     
-    print("✅ BOT SẴN SÀNG — Gõ /start → TRẢ LỜI NGAY!")
-    print("⚠️ CHỈ 1 INSTANCE — KHÔNG ĐƯỢC CHẠY NHIỀU BẢN!")
+    print("✅ BOT SẴN SÀNG — Gõ /dudoan → HIỂN THỊ NGÀY + TỶ LỆ!")
     print("="*60)
     
-    # ✅ POLLING ĐƠN LUỒNG — BỎ TẤT CẢ THAM SỐ GÂY LỖI
     bot.polling(none_stop=True, interval=3, timeout=60)
