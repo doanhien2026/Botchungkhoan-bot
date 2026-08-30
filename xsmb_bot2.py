@@ -1,5 +1,5 @@
 # ==========================================================
-# BOT XSMB — HOÀN CHỈNH | SỬA LỖI DỰ ĐOÁN KHÔNG HIỆN
+# BOT XSMB — HOÀN CHỈNH V6.2 | ĐƠN LUỒNG | KHÔNG LỖI 409
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Bot: @Thongkeso999_bot
 # ==========================================================
@@ -33,7 +33,7 @@ HEADERS = {
 # ====================== 🌐 TRANG CHỦ ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V6.1 — Đã sửa lỗi dự đoán | Đang hoạt động"
+    return "✅ Bot XSMB V6.2 — Đơn luồng | Không lỗi 409 | Đang hoạt động"
 
 # ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
@@ -83,7 +83,7 @@ def fetch_result(date_str):
         print(f"❌ Lỗi lấy kết quả: {e}")
         return None
 
-# ====================== 🧠 DỰ ĐOÁN — ĐÃ SỬA ✅ ======================
+# ====================== 🧠 DỰ ĐOÁN — LUÔN TRẢ VỀ KẾT QUẢ ======================
 def get_history(days=60):
     data = load_all_data()
     if not data:
@@ -170,7 +170,8 @@ def cmd_start(m):
     bot.send_message(m.chat.id,
         "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ**\n"
         "✅ Bot: @Thongkeso999_bot\n"
-        "✅ Đã sửa lỗi dự đoán — Luôn trả về kết quả!\n\n"
+        "✅ Đơn luồng — Không lỗi 409!\n"
+        "✅ Luôn trả về dự đoán\n\n"
         "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
         "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
@@ -215,7 +216,6 @@ def cmd_dt(m):
         except:
             pass
     bot.send_message(m.chat.id, "📊 Đang phân tích 60 ngày gần nhất...")
-    # ==== CHỖ SỬA: Đảm bảo luôn có kết quả trả về ====
     pred_text = gen_prediction(60, target_date)
     if not pred_text or len(pred_text) < 10:
         pred_text = """📊 **DỰ ĐOÁN KẾT QUẢ — Ngày mai**
@@ -291,32 +291,37 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
+# ====================== 🚀 KHỞI ĐỘNG — ĐƠN LUỒNG, KHÔNG 409 ======================
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — V6.1 | SỬA LỖI DỰ ĐOÁN")
+    print("🚀 BOT XSMB — V6.2 | ĐƠN LUỒNG | KHÔNG LỖI 409")
     print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # Xóa webhook — tránh xung đột
+    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT
     bot.remove_webhook()
     print("✅ Đã xóa webhook")
     
-    # Chạy Flask nền
+    # ✅ Chạy Flask ở luồng riêng — daemon=True
     Thread(target=run_flask, daemon=True).start()
     print("✅ Flask server đã chạy")
     
-    # Chạy auto-job nền
+    # ✅ Chạy auto-job ở luồng riêng — daemon=True
     Thread(target=auto_send, daemon=True).start()
     print("✅ Auto-job đã chạy")
     
-    print("✅ BOT SẴN SÀNG — Gõ /dudoan → Nhận kết quả ngay!")
+    print("✅ BOT SẴN SÀNG — Gõ /start → Trả lời ngay!")
+    print("⚠️ CHỈ 1 INSTANCE — KHÔNG ĐƯỢC CHẠY NHIỀU BẢN!")
     print("="*60)
     
-    # Polling đơn giản
-    bot.polling(none_stop=True, interval=1, timeout=60)
+    # ✅ POLLING ĐƠN LUỒNG — BỎ TẤT CẢ THAM SỐ GÂY LỖI
+    bot.polling(
+        none_stop=True,
+        interval=2,
+        timeout=60
+    )
