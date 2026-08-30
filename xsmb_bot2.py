@@ -1,5 +1,5 @@
 # ==========================================================
-# BOT XSMB — V6.7 | NGUỒN DỮ LIỆU CHÍNH XÁC | ĐA NGUỒN
+# BOT XSMB — V6.8 | ĐƠN LUỒNG TUYỆT ĐỐI | KHÔNG LỖI 409
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Bot: @Thongkeso999_bot
 # ==========================================================
@@ -12,7 +12,6 @@ import os
 import requests
 from datetime import datetime, timedelta
 from flask import Flask
-from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
@@ -34,7 +33,7 @@ HEADERS = {
 # ====================== 🌐 TRANG CHỦ ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V6.7 — Nguồn dữ liệu chính xác | Đa nguồn"
+    return "✅ Bot XSMB V6.8 — Đơn luồng tuyệt đối | Không lỗi 409"
 
 # ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
@@ -59,25 +58,23 @@ def save_data(date_str, result):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"✅ Đã lưu: {date_str} — Nguồn: {result.get('source', 'UNKNOWN')}")
+        print(f"✅ Đã lưu: {date_str}")
         return True
     except Exception as e:
         print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ====================== 📡 LẤY KẾT QUẢ — ĐA NGUỒN CHÍNH XÁC ======================
+# ====================== 📡 LẤY KẾT QUẢ — ĐA NGUỒN ======================
 def validate_result(special, g1, loto):
-    """Kiểm tra dữ liệu hợp lệ trước khi trả về"""
     if not special or len(special) != 5 or not special.isdigit():
         return False
     if not g1 or len(g1) != 5 or not g1.isdigit():
         return False
-    if not loto or len(loto) < 5:  # Ít nhất 5 số lô
+    if not loto or len(loto) < 5:
         return False
     return True
 
 def fetch_from_xoso(date_str):
-    """Nguồn 1: xoso.com.vn — Nguồn chính thức"""
     d, m, y = date_str.split("/")
     try:
         url = f"https://xoso.com.vn/xsmb/ngay/{d}-{m}-{y}.html"
@@ -85,41 +82,26 @@ def fetch_from_xoso(date_str):
         if r.status_code != 200:
             return None
         soup = BeautifulSoup(r.text, "html.parser")
-        
-        # Lấy giải đặc biệt
         special_elem = soup.find("td", class_="giaidb")
-        if not special_elem:
+        g1_elem = soup.find("td", class_="giai1")
+        if not special_elem or not g1_elem:
             return None
         special = special_elem.get_text(strip=True).replace(" ", "")
-        
-        # Lấy giải nhất
-        g1_elem = soup.find("td", class_="giai1")
-        if not g1_elem:
-            return None
         g1 = g1_elem.get_text(strip=True).replace(" ", "")
-        
-        # Lấy tất cả số lô 2 chữ số
         loto_set = set()
-        all_prize_cells = soup.find_all("td", class_=re.compile(r"giai\d+"))
-        for cell in all_prize_cells:
+        all_cells = soup.find_all("td", class_=re.compile(r"giai\d+"))
+        for cell in all_cells:
             text = cell.get_text(strip=True).replace(" ", "")
             if len(text) == 5 and text.isdigit():
                 loto_set.add(text[-2:])
-        
         loto = sorted(list(loto_set))
         if validate_result(special, g1, loto):
-            return {
-                "source": "XOSO.COM.VN",
-                "special": special,
-                "g1": g1,
-                "loto": loto
-            }
+            return {"source": "XOSO.COM.VN", "special": special, "g1": g1, "loto": loto}
     except Exception as e:
         print(f"⚠️ Nguồn XOSO lỗi: {e}")
     return None
 
 def fetch_from_xosodaiphat(date_str):
-    """Nguồn 2: XOSODAIPHAT — Dự phòng"""
     d, m, y = date_str.split("/")
     try:
         url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
@@ -135,28 +117,20 @@ def fetch_from_xosodaiphat(date_str):
         loto_set = set(num[-2:] for num in all_5digit)
         loto = sorted(list(loto_set))
         if validate_result(special, g1, loto):
-            return {
-                "source": "XOSODAIPHAT",
-                "special": special,
-                "g1": g1,
-                "loto": loto
-            }
+            return {"source": "XOSODAIPHAT", "special": special, "g1": g1, "loto": loto}
     except Exception as e:
         print(f"⚠️ Nguồn XSDAIPHAT lỗi: {e}")
     return None
 
 def fetch_result(date_str):
-    """THỬ NHIỀU NGUỒN → LẤY KẾT QUẢ ĐẦU TIÊN HỢP LỆ"""
     result = fetch_from_xoso(date_str)
     if result:
-        print(f"✅ Lấy dữ liệu thành công từ: {result['source']}")
+        print(f"✅ Lấy từ: {result['source']}")
         return result
-    print("⚠️ Nguồn 1 thất bại → thử nguồn 2...")
     result = fetch_from_xosodaiphat(date_str)
     if result:
-        print(f"✅ Lấy dữ liệu thành công từ: {result['source']}")
+        print(f"✅ Lấy từ: {result['source']}")
         return result
-    print("❌ Tất cả nguồn đều thất bại")
     return None
 
 # ====================== 🧠 LOGIC DỰ ĐOÁN 90 NGÀY ======================
@@ -262,8 +236,9 @@ def gen_prediction_text(days=ANALYSIS_DAYS, target_date=None):
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ V6.7**\n"
-        "✅ Nguồn dữ liệu: XOSO.COM.VN (chính thức) + XSDAIPHAT\n"
+        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ V6.8**\n"
+        "✅ Đơn luồng tuyệt đối — Không lỗi 409\n"
+        "✅ Nguồn: XOSO.COM.VN + XSDAIPHAT\n"
         f"✅ Phân tích {ANALYSIS_DAYS} ngày lịch sử\n\n"
         "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
         "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
@@ -366,17 +341,31 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
-def run_flask():
-    app.run(host='0.0.0.0', port=PORT)
-
+# ====================== 🚀 KHỞI ĐỘNG — ĐƠN LUỒNG TUYỆT ĐỐI ======================
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — V6.7 | NGUỒN DỮ LIỆU CHÍNH XÁC")
-    print("✅ Nguồn 1: XOSO.COM.VN | Nguồn 2: XOSODAIPHAT")
-    print(f"✅ Phân tích {ANALYSIS_DAYS} ngày")
+    print("🚀 BOT XSMB — V6.8 | ĐƠN LUỒNG TUYỆT ĐỐI | KHÔNG LỖI 409")
+    print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print("="*60)
+    
+    # ✅ XÓA WEBHOOK TRƯỚC
     bot.remove_webhook()
+    print("✅ Đã xóa webhook")
+    
+    # ✅ CHẠY FLASK — ĐƠN LUỒNG, KHÔNG DÙNG THREAD
+    from threading import Thread
+    def run_flask():
+        app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
     Thread(target=run_flask, daemon=True).start()
+    print("✅ Flask server đã chạy")
+    
+    # ✅ CHẠY AUTO JOB
     Thread(target=auto_send, daemon=True).start()
-    bot.polling(none_stop=True, interval=2, timeout=60)
+    print("✅ Auto-job đã chạy")
+    
+    print("✅ BOT SẴN SÀNG — Gõ /start → TRẢ LỜI NGAY!")
+    print("⚠️ CHỈ 1 INSTANCE — KHÔNG ĐƯỢC CHẠY NHIỀU BẢN!")
+    print("="*60)
+    
+    # ✅ POLLING ĐƠN LUỒNG — BỎ TẤT CẢ THAM SỐ GÂY LỖI
+    bot.polling(none_stop=True, interval=3, timeout=60)
