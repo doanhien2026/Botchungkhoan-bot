@@ -1,9 +1,9 @@
 # ==========================================================
-# BOT XSMB — V11.0 | TÍNH TOÁN 90 NGÀY THỰC TẾ
-# ✅ 3 Con lô tỷ lệ cao nhất (tính trên 90 ngày)
-# ✅ 1 Cặp lô xiên (kết hợp 2 con cao nhất)
+# BOT XSMB — V11.1 | SỬA LỖI + TÍNH 90 NGÀY THỰC TẾ
+# ✅ 3 Con lô tỷ lệ cao nhất (90 ngày)
+# ✅ 1 Cặp lô xiên
 # ✅ Đầu số đề có xác suất cao nhất
-# ✅ Tỷ lệ % = Số lần xuất hiện ÷ Tổng ngày × 100%
+# ✅ Đã sửa lỗi drop_pending_updates → chạy ngay trên Render
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Chat ID: 1030583610
 # ==========================================================
@@ -53,16 +53,14 @@ def save_data(date_str, special, g1, loto):
         print(f"Lỗi lưu: {e}")
         return False
 
-# ====================== 🧠 LOGIC TÍNH TOÁN CHÍNH XÁC ======================
+# ====================== 🧠 LOGIC TÍNH TOÁN 90 NGÀY ======================
 def phan_tich_90_ngay():
     """
-    ✅ LOGIC TÍNH TOÁN:
-    1. Lấy dữ liệu 90 ngày gần nhất
+    ✅ Tính toán CHÍNH XÁC từ dữ liệu thực tế:
+    1. Lấy 90 ngày gần nhất
     2. Đếm tần suất từng con lô 2 chữ số
-    3. Tỷ lệ % = (Số lần xuất hiện / Tổng ngày) × 100
-    4. Lấy 3 con có tỷ lệ CAO NHẤT
-    5. Lô xiên = 2 con cao nhất kết hợp
-    6. Đầu số đề = Đầu số 5 chữ số Giải ĐB xuất hiện nhiều nhất
+    3. Tỷ lệ % = (Số lần xuất hiện / Tổng ngày) × 100%
+    4. 3 con cao nhất → 1 cặp xiên (2 con cao nhất) → đầu số đề
     """
     data = load_data()
     tong_ngay = len(data)
@@ -87,8 +85,7 @@ def phan_tich_90_ngay():
     so_ngay_phan_tich = min(ANALYSIS_DAYS, tong_ngay)
     danh_sach_phan_tich = sap_xep_ngay[:so_ngay_phan_tich]
     
-    # === BƯỚC 1: Đếm tất cả số lô 2 chữ số ===
-    tat_ca_lo = []          # Tất cả số lô ra trong 90 ngày
+    tat_ca_lo = []          # Tất cả số lô 2 chữ số
     tat_ca_dau_so_de = []   # Đầu số Giải Đặc Biệt (chữ số đầu)
     
     for ngay in danh_sach_phan_tich:
@@ -107,14 +104,10 @@ def phan_tich_90_ngay():
             # Lấy đầu số Giải Đặc Biệt (chữ số đầu tiên)
             tat_ca_dau_so_de.append(gdb[0])
     
-    # === BƯỚC 2: Tính tần suất & tỷ lệ từng con lô ===
+    # === Tính tần suất & tỷ lệ từng con lô ===
     dem_lo = Counter(tat_ca_lo)
-    tong_so_lo = len(tat_ca_lo)
-    
-    # Tính tỷ lệ % cho từng con lô
     danh_sach_lo_tu_dien = []
     for so, so_lan_ra in dem_lo.items():
-        # Tỷ lệ % dựa trên số ngày phân tích
         ty_le = round((so_lan_ra / so_ngay_phan_tich) * 100, 1)
         danh_sach_lo_tu_dien.append({
             "so": so,
@@ -126,10 +119,10 @@ def phan_tich_90_ngay():
     danh_sach_lo_tu_dien.sort(key=lambda x: -x["ty_le"])
     top3_lo = danh_sach_lo_tu_dien[:3]
     
-    # === BƯỚC 3: 1 Cặp lô xiên = 2 con có tỷ lệ cao nhất ===
+    # === 1 Cặp lô xiên = 2 con có tỷ lệ cao nhất ===
     cap_xien = [top3_lo[0]["so"], top3_lo[1]["so"]] if len(top3_lo) >= 2 else ["--", "--"]
     
-    # === BƯỚC 4: Đầu số đề có tỷ lệ cao nhất ===
+    # === Đầu số đề có tỷ lệ cao nhất ===
     dau_so_de = "--"
     ty_le_dau_so = 0.0
     if tat_ca_dau_so_de:
@@ -138,7 +131,6 @@ def phan_tich_90_ngay():
         ty_le_dau_so = round((so_lan_dau / len(tat_ca_dau_so_de)) * 100, 1)
         dau_so_de = so_dau
     
-    # === TRẢ KẾT QUẢ ===
     return {
         "du": True,
         "tong_ngay": so_ngay_phan_tich,
@@ -146,26 +138,26 @@ def phan_tich_90_ngay():
         "top3_lo": top3_lo,
         "cap_xien": cap_xien,
         "dau_so_de": dau_so_de,
-        "ty_le_dau_so": ty_le_dau_so,
-        "tong_so_lo": tong_so_lo
+        "ty_le_dau_so": ty_le_dau_so
     }
 
 # ====================== 📋 LỆNH BOT ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V11.0 — Phân tích 90 ngày thực tế"
+    return "✅ Bot XSMB V11.1 — Đã sửa lỗi + Phân tích 90 ngày"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — V11.0 | PHÂN TÍCH 90 NGÀY THỰC TẾ**\n"
+        "🤖 **BOT XSMB — V11.1 | PHÂN TÍCH 90 NGÀY THỰC TẾ**\n"
         "✅ Tính toán từ dữ liệu kết quả thực tế bạn nhập\n"
+        "✅ 3 Con lô + 1 Cặp xiên + Đầu số đề\n"
         "✅ Tỷ lệ % = Số lần xuất hiện ÷ Tổng ngày × 100%\n\n"
         "📌 /nhap DDMMYYYY ĐB G1 LÔ1,LÔ2,... → Nhập kết quả\n"
-        "📌 /dudoan → Phân tích & dự đoán (3 lô + 1 xiên + đầu số đề)\n"
+        "📌 /dudoan → Phân tích & dự đoán\n"
         "📌 /status → Xem tổng số ngày đã lưu\n"
         "📌 DDMMYYYY → Xem dữ liệu ngày đó\n\n"
-        "💡 Nhập càng nhiều ngày → dự đoán càng chính xác!",
+        "💡 Nhập 5-7 ngày → dự đoán chính xác hơn!",
         parse_mode="Markdown"
     )
 
@@ -180,7 +172,6 @@ def cmd_nhap(m):
         )
     t, db, g1, lo_str = parts[1], parts[2], parts[3], parts[4]
     
-    # Kiểm tra định dạng ngày
     if not re.match(r"^\d{8}$", t):
         return bot.send_message(m.chat.id, "❌ Ngày sai định dạng! VD: 29082026")
     date_str = f"{t[:2]}/{t[2:4]}/{t[4:8]}"
@@ -189,18 +180,15 @@ def cmd_nhap(m):
     except:
         return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ!")
     
-    # Kiểm tra ĐB và G1
     if len(db) != 5 or not db.isdigit():
         return bot.send_message(m.chat.id, "❌ Giải Đặc Biệt phải 5 chữ số!")
     if len(g1) != 5 or not g1.isdigit():
         return bot.send_message(m.chat.id, "❌ Giải Nhất phải 5 chữ số!")
     
-    # Tách danh sách lô
     ds_lo = [x.strip() for x in lo_str.split(",") if x.strip() and len(x.strip()) == 2 and x.strip().isdigit()]
     if len(ds_lo) < 15:
         return bot.send_message(m.chat.id, f"⚠️ Cần ít nhất 15 số lô, mới có {len(ds_lo)}")
     
-    # Lưu dữ liệu
     save_data(date_str, db, g1, ds_lo)
     bot.send_message(m.chat.id,
         f"✅ **ĐÃ LƯU: {date_str}**\n"
@@ -231,7 +219,6 @@ def cmd_dudoan(m):
     
     ngay_mai = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
     
-    # === TẠO BẢNG KẾT QUẢ ===
     noi_dung = f"""
 📊 **PHÂN TÍCH DỮ LIỆU {kq['tong_ngay']} NGÀY GẦN NHẤT**
 (Tổng {kq['tong_nguon_du_lieu']} ngày trong kho dữ liệu)
@@ -241,11 +228,9 @@ def cmd_dudoan(m):
 (Tỷ lệ = Số lần xuất hiện ÷ Tổng ngày × 100%)
 
 """
-    # Thêm 3 con lô
     for i, lo in enumerate(kq["top3_lo"], 1):
         noi_dung += f"   {i} • `{lo['so']}`  →  Xuất hiện: {lo['so_lan_ra']} lần  |  Tỷ lệ: {lo['ty_le']}%\n"
     
-    # Thêm cặp lô xiên
     noi_dung += f"""
 🔀 **1 CẶP LÔ XIÊN (Kết hợp 2 con cao nhất):**
    → `{kq['cap_xien'][0]}` + `{kq['cap_xien'][1]}`
@@ -281,5 +266,6 @@ if __name__ == "__main__":
     bot.remove_webhook()
     from threading import Thread
     Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
-    print("✅ BOT ĐÃ CHẠY — Phân tích 90 ngày dữ liệu thực tế!")
-    bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
+    print("✅ BOT ĐÃ SẴN SÀNG — Phân tích 90 ngày dữ liệu thực tế!")
+    # ✅ ĐÃ XÓA drop_pending_updates → tương thích với pyTelegramBotAPI 4.22.0
+    bot.polling(none_stop=True, interval=3, timeout=60)
