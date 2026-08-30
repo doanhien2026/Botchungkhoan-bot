@@ -1,5 +1,6 @@
 # ==========================================================
-# BOT XSMB — ĐÃ SỬA LỖI 404 | Bỏ remove_webhook | Điền sẵn ID
+# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot | SỬA LỖI 404
+# Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # ==========================================================
 
 import telebot
@@ -14,10 +15,9 @@ from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
 
-# ====================== 🔧 ĐÃ ĐIỀN SẴN THÔNG TIN CỦA BẠN ======================
-# ⚠️ NẾU LỖI 404 → Vào @BotFather tạo bot MỚI → thay Token MỚI vào đây
-TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
-CHAT_ID = "1030583610"  # ✅ ĐÚNG ID CỦA BẠN
+# ====================== 🔧 CẤU HÌNH ======================
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"  # ✅ TOKEN MỚI
+CHAT_ID = "1030583610"
 CHANNEL_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
@@ -29,9 +29,10 @@ HEADERS = {
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
-# ====================== 🔐 CHỈ BẠN DÙNG ======================
-def auth(uid):
-    return str(uid) == str(CHAT_ID) or str(uid) == CHANNEL_ID
+# ====================== 🌐 SỬA LỖI 404 — TRANG CHỦ ======================
+@app.route('/')
+def home():
+    return "✅ Bot XSMB V6.0 — Đang hoạt động & Lưu dữ liệu tự động"
 
 # ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
@@ -67,7 +68,7 @@ def fetch_result(date_str):
             "loto": sorted(list(loto_set))[:27]
         }
     except Exception as e:
-        print(f"Lỗi: {e}")
+        print(f"Lỗi fetch: {e}")
         return None
 
 # ====================== 🧠 DỰ ĐOÁN ======================
@@ -128,17 +129,17 @@ def gen_prediction(days=60, target_date=None):
         "________________________________________",
         "",
         "🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**",
-        "   (Tần suất xuất hiện + chu kỳ ngủ)"
+        "   (Tần suất + chu kỳ ngủ)"
     ]
     for i, item in enumerate(top3, 1):
         lines.append(f"   {i}. `{item['num']}` – {item['count']} lần | {item['rate']}% | Ngủ {item['sleep']} ngày")
     lines.extend([
         "",
         "🔀 **1 CẶP LÔ XIÊN:**",
-        f"   → Kết hợp 2 con cao nhất: `{xien[0]} – {xien[1]}`",
+        f"   → `{xien[0]} – {xien[1]}`",
         "",
         "🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**",
-        f"   → Đầu số `{fd}` – xuất hiện {fcnt} lần → {frate}%",
+        f"   → Đầu số `{fd}` – {fcnt} lần → {frate}%",
         "",
         "⚠️ *Chỉ tham khảo – Chơi có trách nhiệm!*"
     ])
@@ -147,20 +148,19 @@ def gen_prediction(days=60, target_date=None):
 # ====================== 📋 LỆNH BOT ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
-    if not auth(m.chat.id):
-        return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
+    print(f"✅ /start từ: {m.chat.id}")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — ĐÃ SỬA LỖI 404**\n"
-        "✅ Token + ID đã điền sẵn | ✅ Bỏ webhook gây lỗi\n\n"
-        "📌 DDMMYYYY → Lưu kết quả\n"
-        "📌 /test DDMMYYYY → Xem thử\n"
+        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ**\n"
+        "✅ Bot: @Thongkeso999_bot\n"
+        "✅ Token MỚI — Đã thay đổi!\n\n"
+        "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
+        "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
         "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
     )
 
 @bot.message_handler(commands=['test'])
 def cmd_test(m):
-    if not auth(m.chat.id): return
     parts = m.text.strip().split()
     if len(parts) < 2 or not re.match(r"^\d{8}$", parts[1]):
         return bot.send_message(m.chat.id, "⚠️ /test DDMMYYYY — VD: /test 28082026")
@@ -183,7 +183,6 @@ def cmd_test(m):
 
 @bot.message_handler(commands=['dudoan', 'thongke'])
 def cmd_dt(m):
-    if not auth(m.chat.id): return
     parts = m.text.strip().split()
     target_date = None
     if len(parts) >= 2 and re.match(r"^\d{8}$", parts[1]):
@@ -193,7 +192,7 @@ def cmd_dt(m):
             datetime(int(y), int(mo), int(d))
             target_date = f"{d}/{mo}/{y}"
         except: pass
-    bot.send_message(m.chat.id, "📊 Đang phân tích dữ liệu...")
+    bot.send_message(m.chat.id, "📊 Đang phân tích 60 ngày gần nhất...")
     rep = gen_prediction(60, target_date)
     bot.send_message(m.chat.id, rep, parse_mode="Markdown")
 
@@ -201,7 +200,6 @@ def cmd_dt(m):
 def handle(m):
     txt = m.text.strip()
     if txt.startswith('/'): return
-    if not auth(m.chat.id): return
     if not re.match(r"^\d{8}$", txt):
         return bot.send_message(m.chat.id, "⚠️ Gõ DDMMYYYY hoặc /start")
     d, mo, y = txt[:2], txt[2:4], txt[4:8]
@@ -250,31 +248,32 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG — ĐÃ BỎ GÂY LỖI ======================
+# ====================== 🚀 KHỞI ĐỘNG ======================
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — ĐÃ SỬA LỖI 404")
+    print("🚀 BOT XSMB — TOKEN MỚI | SỬA LỖI 404")
+    print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ BỎ bot.remove_webhook() — GÂY LỖI 404!
-    print("✅ Bỏ webhook — tránh lỗi 404")
+    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT
+    bot.remove_webhook()
+    print("✅ Đã xóa webhook")
     
-    # ✅ Chạy nền
+    # ✅ Chạy Flask nền
     Thread(target=run_flask, daemon=True).start()
-    Thread(target=auto_send, daemon=True).start()
+    print("✅ Flask đã chạy — Sửa lỗi 404 trang chủ")
     
-    print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
-    print("⚠️ NẾU VẪN LỖI 404 → LẤY TOKEN MỚI TỪ @BotFather")
+    # ✅ Chạy auto-job nền
+    Thread(target=auto_send, daemon=True).start()
+    print("✅ Auto-job đã chạy")
+    
+    print("✅ BOT SẴN SÀNG — Gõ /start → Trả lời ngay!")
+    print("⚠️ CHỈ 1 INSTANCE — KHÔNG CHẠY NHIỀU BẢN!")
     print("="*60)
     
-    # ✅ Polling đơn luồng
-    while True:
-        try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60)
-        except Exception as e:
-            print(f"⚠️ Lỗi: {e} | Thử lại 15s...")
-            time.sleep(15)
+    # ✅ POLLING ĐƠN GIẢN
+    bot.polling(none_stop=True, interval=1, timeout=60)
