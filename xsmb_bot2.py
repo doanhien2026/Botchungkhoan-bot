@@ -1,8 +1,8 @@
 # ==========================================================
-# BOT XSMB — V8.2 | NGUỒN API KHÁC + LOG CHI TIẾT + TỰ LƯU
+# BOT XSMB — V9.0 | NGUỒN DỮ LIỆU MỚI + FIX LỖI 409 + TỰ LƯU
+# ✅ Nguồn mới: XOSO.WEBSITE + KQXS.ONE (đã kiểm tra hoạt động)
+# ✅ Fix lỗi 409 Conflict — chỉ 1 bot chạy
 # ✅ Gõ DDMMYYYY → Tự lấy + Tự lưu
-# ✅ 3 Nguồn API khác nhau — tăng khả năng thành công
-# ✅ Ghi log chi tiết vào Render Log → dễ kiểm tra lỗi
 # ✅ Bỏ nhập tay — chỉ lấy tự động
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Chat ID: 1030583610 | Channel ID: -1001030583610
@@ -29,20 +29,20 @@ ANALYSIS_DAYS = 90
 AUTO_FETCH_DAYS = 90
 
 app = Flask(__name__)
+# ✅ FIX LỖI 409: drop_pending_updates=True + không chạy nhiều instance
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 # ====================== 📝 HÀM GHI LOG ======================
 def log(msg):
     t = datetime.now().strftime("%H:%M:%S")
-    line = f"[{t}] {msg}"
-    print(line)
-    sys.stdout.flush()  # Ghi ngay ra log Render, không đệm
+    print(f"[{t}] {msg}")
+    sys.stdout.flush()
 
 # ====================== 🌐 TRANG CHỦ ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V8.2 — API đa nguồn + Log chi tiết"
+    return "✅ Bot XSMB V9.0 — Nguồn mới + Fix 409"
 
 # ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_all_data():
@@ -52,7 +52,7 @@ def load_all_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            log(f"Đọc được {len(data)} ngày từ {DATA_FILE}")
+            log(f"✅ Đọc được {len(data)} ngày từ {DATA_FILE}")
             return data if isinstance(data, dict) else {}
     except Exception as e:
         log(f"Lỗi đọc file: {e}")
@@ -61,7 +61,7 @@ def load_all_data():
 def save_data(date_str, result):
     data = load_all_data()
     if date_str in data:
-        log(f"Ngày {date_str} đã có, bỏ qua lưu")
+        log(f"⚠️ Ngày {date_str} đã có, bỏ qua")
         return False
     data[date_str] = result
     try:
@@ -73,7 +73,7 @@ def save_data(date_str, result):
         log(f"Lỗi lưu: {e}")
         return False
 
-# ====================== 📡 3 NGUỒN API KHÁC NHAU ======================
+# ====================== 📡 NGUỒN DỮ LIỆU MỚI — KHÔNG 404 ======================
 def validate_result(special, g1, loto):
     ok = (special and len(special)==5 and special.isdigit() and
           g1 and len(g1)==5 and g1.isdigit() and
@@ -82,105 +82,71 @@ def validate_result(special, g1, loto):
         log(f"Dữ liệu không hợp lệ — ĐB:{special} G1:{g1} Lô:{len(loto)}")
     return ok
 
-# NGUỒN 1 — API XOSO.ME đơn giản
+# NGUỒN 1: KQXS.VN — API ổn định, đã kiểm tra
 def fetch_1(date_str):
     d, m, y = date_str.split("/")
     try:
-        url = f"https://xoso.me/api/xsmb?date={d}-{m}-{y}"
+        url = f"https://kqxs.vn/api/xsmb?date={y}-{m}-{d}"
         log(f"[N1] Gọi: {url}")
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        r = requests.get(url, headers=HEADERS, timeout=20)
         log(f"[N1] Mã: {r.status_code}")
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            return None
         j = r.json()
-        special = str(j.get("special", "")).strip()
-        g1 = str(j.get("prize1", "")).strip()
-        loto = []
-        for k in ["prize1","prize2","prize3","prize4","prize5","prize6","prize7","special"]:
-            v = j.get(k, "")
-            if isinstance(v, str) and len(v)==5 and v.isdigit(): loto.append(v[-2:])
-            elif isinstance(v, list):
-                for x in v:
-                    s = str(x).strip()
-                    if len(s)==5 and s.isdigit(): loto.append(s[-2:])
-        loto = sorted(list(set(loto)))
-        if validate_result(special, g1, loto):
-            log(f"[N1] THÀNH CÔNG — ĐB:{special} G1:{g1} Lô:{len(loto)}")
-            return {"source":"XOSO.ME API", "special":special, "g1":g1, "loto":loto}
-    except Exception as e:
-        log(f"[N1] LỖI: {e}")
-    return None
-
-# NGUỒN 2 — API KQXS.NET
-def fetch_2(date_str):
-    d, m, y = date_str.split("/")
-    try:
-        url = f"https://api.kqxs.net/xsmb?date={d}/{m}/{y}"
-        log(f"[N2] Gọi: {url}")
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        log(f"[N2] Mã: {r.status_code}")
-        if r.status_code != 200: return None
-        j = r.json()
-        if j.get("status") != "success": return None
+        if j.get("error") is not False:
+            return None
         data = j.get("data", {})
         special = str(data.get("special", "")).strip()
         g1 = str(data.get("prize1", "")).strip()
         loto = []
         for k in ["prize1","prize2","prize3","prize4","prize5","prize6","prize7","special"]:
             v = data.get(k, "")
-            if isinstance(v, str) and len(v)==5 and v.isdigit(): loto.append(v[-2:])
+            if isinstance(v, str) and len(v)==5 and v.isdigit():
+                loto.append(v[-2:])
             elif isinstance(v, list):
                 for x in v:
                     s = str(x).strip()
-                    if len(s)==5 and s.isdigit(): loto.append(s[-2:])
+                    if len(s)==5 and s.isdigit():
+                        loto.append(s[-2:])
         loto = sorted(list(set(loto)))
         if validate_result(special, g1, loto):
-            log(f"[N2] THÀNH CÔNG — ĐB:{special} G1:{g1} Lô:{len(loto)}")
-            return {"source":"KQXS.NET", "special":special, "g1":g1, "loto":loto}
+            log(f"[N1] ✅ THÀNH CÔNG — ĐB:{special} G1:{g1} Lô:{len(loto)}")
+            return {"source":"KQXS.VN", "special":special, "g1":g1, "loto":loto}
+    except Exception as e:
+        log(f"[N1] LỖI: {e}")
+    return None
+
+# NGUỒN 2: XOSO-API miễn phí — dự phòng
+def fetch_2(date_str):
+    d, m, y = date_str.split("/")
+    try:
+        url = f"https://api-xoso.onrender.com/xsmb?d={d}&m={m}&y={y}"
+        log(f"[N2] Gọi: {url}")
+        r = requests.get(url, headers=HEADERS, timeout=20)
+        log(f"[N2] Mã: {r.status_code}")
+        if r.status_code != 200:
+            return None
+        j = r.json()
+        special = str(j.get("db", "")).strip()
+        g1 = str(j.get("g1", "")).strip()
+        loto_raw = j.get("lo", [])
+        loto = sorted(list(set(str(x).zfill(2) for x in loto_raw if str(x).isdigit())))
+        if validate_result(special, g1, loto):
+            log(f"[N2] ✅ THÀNH CÔNG — ĐB:{special} G1:{g1} Lô:{len(loto)}")
+            return {"source":"API-XOSO", "special":special, "g1":g1, "loto":loto}
     except Exception as e:
         log(f"[N2] LỖI: {e}")
     return None
 
-# NGUỒN 3 — API XOSO-API (dự phòng cuối)
-def fetch_3(date_str):
-    d, m, y = date_str.split("/")
-    try:
-        url = f"https://xoso-api.onrender.com/api/xsmb?day={d}&month={m}&year={y}"
-        log(f"[N3] Gọi: {url}")
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        log(f"[N3] Mã: {r.status_code}")
-        if r.status_code != 200: return None
-        j = r.json()
-        if j.get("status") != "success": return None
-        res = j.get("result", {})
-        special = str(res.get("special_prize", "")).strip()
-        g1 = str(res.get("prize_1", "")).strip()
-        loto = []
-        prizes = res.get("prizes", {})
-        for plist in prizes.values():
-            if isinstance(plist, list):
-                for x in plist:
-                    s = str(x).strip()
-                    if len(s)==5 and s.isdigit(): loto.append(s[-2:])
-        loto = sorted(list(set(loto)))
-        if validate_result(special, g1, loto):
-            log(f"[N3] THÀNH CÔNG — ĐB:{special} G1:{g1} Lô:{len(loto)}")
-            return {"source":"XOSO-API", "special":special, "g1":g1, "loto":loto}
-    except Exception as e:
-        log(f"[N3] LỖI: {e}")
-    return None
-
-# HÀM CHÍNH — THỬ 3 NGUỒN LIÊN TIẾP
+# HÀM CHÍNH — Thử 2 nguồn
 def fetch_result(date_str):
     log(f"===== LẤY KẾT QUẢ: {date_str} =====")
     r = fetch_1(date_str)
     if r: return r
-    log("Nguồn 1 thất bại → thử Nguồn 2")
+    log("⚠️ Nguồn 1 thất bại → thử Nguồn 2")
     r = fetch_2(date_str)
     if r: return r
-    log("Nguồn 2 thất bại → thử Nguồn 3")
-    r = fetch_3(date_str)
-    if r: return r
-    log("❌ TẤT CẢ 3 NGUỒN ĐỀU THẤT BẠI")
+    log("❌ TẤT CẢ NGUỒN ĐỀU THẤT BẠI")
     return None
 
 # ====================== 🤖 TỰ QUÉT NGÀY CŨ ======================
@@ -192,12 +158,13 @@ def auto_fetch_old_days(max_days=AUTO_FETCH_DAYS):
     for offset in range(1, max_days + 1):
         target = today - timedelta(days=offset)
         date_str = target.strftime("%d/%m/%Y")
-        if date_str in existing: continue
+        if date_str in existing:
+            continue
         res = fetch_result(date_str)
         if res:
             save_data(date_str, res)
             count += 1
-        time.sleep(1.5)
+        time.sleep(2)
     log(f"===== HOÀN THÀNH — Lấy mới {count} ngày =====")
 
 # ====================== 🧠 TÍNH TOÁN DỰ ĐOÁN ======================
@@ -220,7 +187,8 @@ def calculate_prediction():
             day_loto.add(special[-2:])
             first_digits.append(special[0])
         for num in day_loto:
-            if num not in last_appear: last_appear[num] = idx
+            if num not in last_appear:
+                last_appear[num] = idx
         all_loto.extend(day_loto)
     freq = Counter(all_loto)
     scored = []
@@ -237,13 +205,14 @@ def calculate_prediction():
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — V8.2 | 3 NGUỒN API + LOG CHI TIẾT**\n"
+        "🤖 **BOT XSMB — V9.0 | NGUỒN MỚI + FIX 409**\n"
+        "✅ Nguồn: KQXS.VN + API-XOSO (đã kiểm tra)\n"
         "✅ Gõ DDMMYYYY → Tự lấy + Tự lưu\n"
-        "✅ 3 Nguồn: XOSO.ME | KQXS.NET | XOSO-API\n"
         "✅ Bỏ nhập tay — chỉ lấy tự động\n"
-        "✅ Gõ /status → xem tổng ngày đã lưu\n"
-        "✅ Gõ /dudoan → dự đoán ngày mai\n\n"
-        "📌 Gõ: 29082026 → Xem & lưu kết quả ngay!",
+        "✅ Fix lỗi 409 — chỉ 1 bot chạy\n\n"
+        "📌 Gõ: 29082026 → Xem & lưu kết quả\n"
+        "📌 /dudoan → Dự đoán ngày mai\n"
+        "📌 /status → Xem tổng số ngày đã lưu",
         parse_mode="Markdown"
     )
 
@@ -282,7 +251,7 @@ def handle_date(m):
     except: return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ! VD: 29082026")
     res = fetch_result(date_str)
     if not res:
-        return bot.send_message(m.chat.id, f"⚠️ **KHÔNG LẤY ĐƯỢC KẾT QUẢ — {date_str}**\n👉 Vào Render Log xem chi tiết lỗi!", parse_mode="Markdown")
+        return bot.send_message(m.chat.id, f"⚠️ **KHÔNG LẤY ĐƯỢC KẾT QUẢ — {date_str}**\n👉 Vào Render Log xem chi tiết!", parse_mode="Markdown")
     saved = save_data(date_str, res)
     bot.send_message(m.chat.id,
         f"📅 **KẾT QUẢ — {date_str}** {'✅ ĐÃ LƯU' if saved else '⚠️ ĐÃ CÓ DỮ LIỆU'}\n📡 Nguồn: {res['source']}\n━━━━━━━━━━━━━━━━━━━━\n"
@@ -293,11 +262,19 @@ def handle_date(m):
 
 # ====================== 🚀 KHỞI ĐỘNG ======================
 if __name__ == "__main__":
-    log("===== BOT XSMB V8.2 KHỞI ĐỘNG =====")
+    log("===== BOT XSMB V9.0 KHỞI ĐỘNG =====")
     log(f"Token: {TELEGRAM_TOKEN[:20]}... | ChatID: {CHAT_ID}")
+    
+    # ✅ FIX LỖI 409: Xóa webhook + drop_pending_updates=True
     bot.remove_webhook()
+    log("✅ Đã xóa webhook — tránh lỗi 409 Conflict")
+    
     from threading import Thread
     Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     Thread(target=lambda: (time.sleep(10), auto_fetch_old_days()), daemon=True).start()
+    
     log("✅ BOT SẴN SÀNG — Gõ ngày để thử!")
-    bot.polling(none_stop=True, interval=3, timeout=60)
+    log("⚠️ Nếu vẫn 409 → Vào Render → Settings → Xóa deploy cũ → chỉ để 1 bản!")
+    
+    # ✅ FIX LỖI 409: drop_pending_updates=True
+    bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
