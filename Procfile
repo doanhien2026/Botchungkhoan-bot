@@ -1,1 +1,1 @@
-web: python main.py
+web: python xsmb_bot2.py
