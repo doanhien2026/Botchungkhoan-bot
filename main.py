@@ -1,6 +1,9 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot | SỬA LỖI 409
+# BOT XSMB — HOÀN CHỈNH | SỬA LỖI KHÔNG TRẢ LỜI
+# Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
+# Bot: @Thongkeso999_bot
 # ==========================================================
+
 import telebot
 import re
 import time
@@ -12,7 +15,6 @@ from flask import Flask
 from threading import Thread
 from collections import Counter
 from bs4 import BeautifulSoup
-from telebot.apihelper import ApiTelegramException
 
 # ====================== 🔧 CẤU HÌNH ======================
 TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
@@ -27,10 +29,6 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
-
-# ====================== 🔐 XÁC THỰC ======================
-def auth(uid):
-    return str(uid) == str(CHAT_ID) or str(uid) == CHANNEL_ID
 
 # ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
@@ -143,23 +141,24 @@ def gen_prediction(days=60, target_date=None):
     ])
     return "\n".join(lines)
 
-# ====================== 📋 LỆNH BOT ======================
+# ====================== 📋 LỆNH BOT — ĐƠN GIẢN & CHẮC CHẮN ======================
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
-    if not auth(m.chat.id):
-        return bot.send_message(m.chat.id, "❌ Bot chỉ phục vụ chủ sở hữu!")
+    print(f"✅ Nhận lệnh /start từ ID: {m.chat.id}")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — TOKEN MỚI CHÍNH THỨC**\n"
-        "✅ Bot: @Thongkeso999_bot | ✅ Đã sửa lỗi 409\n\n"
-        "📌 DDMMYYYY → Xem + LƯU kết quả\n"
-        "📌 /test DDMMYYYY → Chỉ xem, KHÔNG lưu\n"
+        "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ**\n"
+        "✅ Bot: @Thongkeso999_bot\n"
+        "✅ Đã kết nối thành công!\n\n"
+        "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
+        "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
-        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định"
+        "📌 /dudoan DDMMYYYY → Dự đoán ngày chỉ định\n\n"
+        "⚠️ Chơi có trách nhiệm!"
     )
 
 @bot.message_handler(commands=['test'])
 def cmd_test(m):
-    if not auth(m.chat.id): return
+    print(f"✅ Nhận lệnh /test từ ID: {m.chat.id}")
     parts = m.text.strip().split()
     if len(parts) < 2 or not re.match(r"^\d{8}$", parts[1]):
         return bot.send_message(m.chat.id, "⚠️ /test DDMMYYYY — VD: /test 28082026")
@@ -182,7 +181,7 @@ def cmd_test(m):
 
 @bot.message_handler(commands=['dudoan', 'thongke'])
 def cmd_dt(m):
-    if not auth(m.chat.id): return
+    print(f"✅ Nhận lệnh /dudoan từ ID: {m.chat.id}")
     parts = m.text.strip().split()
     target_date = None
     if len(parts) >= 2 and re.match(r"^\d{8}$", parts[1]):
@@ -200,7 +199,7 @@ def cmd_dt(m):
 def handle(m):
     txt = m.text.strip()
     if txt.startswith('/'): return
-    if not auth(m.chat.id): return
+    print(f"✅ Nhận tin nhắn: {txt} từ ID: {m.chat.id}")
     if not re.match(r"^\d{8}$", txt):
         return bot.send_message(m.chat.id, "⚠️ Gõ DDMMYYYY hoặc /start")
     d, mo, y = txt[:2], txt[2:4], txt[4:8]
@@ -249,43 +248,35 @@ def auto_send():
             print(f"Lỗi auto: {e}")
             time.sleep(60)
 
-# ====================== 🚀 KHỞI ĐỘNG — SỬA LỖI 409 ======================
+# ====================== 🚀 KHỞI ĐỘNG — ĐƠN GIẢN & ỔN ĐỊNH ======================
 def run_flask(): app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI | SỬA LỖI 409")
+    print("🚀 BOT XSMB — KHỞI ĐỘNG")
     print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
-    print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT 409
+    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT
     bot.remove_webhook()
-    print("✅ Đã xóa webhook — tránh xung đột")
+    print("✅ Đã xóa webhook")
     
     # ✅ Chạy Flask nền
     Thread(target=run_flask, daemon=True).start()
-    print("✅ Flask server đã khởi động")
+    print("✅ Flask đã chạy")
     
     # ✅ Chạy auto-job nền
     Thread(target=auto_send, daemon=True).start()
-    print("✅ Auto-job đã khởi động")
+    print("✅ Auto-job đã chạy")
     
-    print("✅ BOT SẴN SÀNG — Gõ /start để kiểm tra!")
-    print("⚠️ CHỈ 1 INSTANCE — TRÁNH LỖI 409")
+    print("✅ BOT SẴN SÀNG — Gõ /start → Bot trả lời ngay!")
     print("="*60)
     
-    # ✅ POLLING ĐƠN LUỒNG — KHÔNG DÙNG THAM SỐ GÂY LỖI
+    # ✅ POLLING ĐƠN GIẢN — KHÔNG THAM SỐ GÂY LỖI
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60, none_stop=True)
-        except ApiTelegramException as e:
-            if e.error_code == 409:
-                print("❌ LỖI 409 — Phát hiện phiên bản khác đang chạy!")
-                print("💡 Xóa dịch vụ cũ trên Render → chỉ giữ 1 bản!")
-            print("⏳ Thử lại sau 10 giây...")
-            time.sleep(10)
+            bot.polling(none_stop=True, interval=1, timeout=60)
         except Exception as e:
-            print(f"⚠️ Lỗi: {e} | Thử lại sau 15 giây...")
-            time.sleep(15)
+            print(f"⚠️ Lỗi polling: {e} | Thử lại sau 5s...")
+            time.sleep(5)
