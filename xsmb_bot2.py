@@ -1,6 +1,7 @@
 # ==========================================================
-# BOT XSMB — TOKEN MỚI | @Thongkeso999_bot | SỬA LỖI 404
+# BOT XSMB — HOÀN CHỈNH | SỬA LỖI DỰ ĐOÁN KHÔNG HIỆN
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
+# Bot: @Thongkeso999_bot
 # ==========================================================
 
 import telebot
@@ -16,7 +17,7 @@ from collections import Counter
 from bs4 import BeautifulSoup
 
 # ====================== 🔧 CẤU HÌNH ======================
-TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"  # ✅ TOKEN MỚI
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
 CHAT_ID = "1030583610"
 CHANNEL_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
@@ -29,24 +30,31 @@ HEADERS = {
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
-# ====================== 🌐 SỬA LỖI 404 — TRANG CHỦ ======================
+# ====================== 🌐 TRANG CHỦ ======================
 @app.route('/')
 def home():
-    return "✅ Bot XSMB V6.0 — Đang hoạt động & Lưu dữ liệu tự động"
+    return "✅ Bot XSMB V6.1 — Đã sửa lỗi dự đoán | Đang hoạt động"
 
 # ====================== 💾 DỮ LIỆU ======================
 def load_all_data():
-    if not os.path.exists(DATA_FILE): return {}
+    if not os.path.exists(DATA_FILE):
+        return {}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except: return {}
+    except Exception as e:
+        print(f"⚠️ Lỗi đọc dữ liệu: {e}")
+        return {}
 
 def save_data(date_str, result):
     data = load_all_data()
     data[date_str] = result
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"✅ Đã lưu: {date_str}")
+    except Exception as e:
+        print(f"⚠️ Lỗi lưu dữ liệu: {e}")
 
 # ====================== 📡 LẤY KẾT QUẢ ======================
 def fetch_result(date_str):
@@ -54,10 +62,14 @@ def fetch_result(date_str):
     url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            print(f"⚠️ Trang trả về mã: {r.status_code}")
+            return None
         soup = BeautifulSoup(r.text, "html.parser")
         all_5digit = re.findall(r"\b\d{5}\b", soup.get_text())
-        if len(all_5digit) < 8: return None
+        if len(all_5digit) < 8:
+            print(f"⚠️ Không đủ dữ liệu: {len(all_5digit)} số 5 chữ số")
+            return None
         dac_biet = all_5digit[-1]
         giai_nhat = all_5digit[-2]
         loto_set = set(num[-2:] for num in all_5digit)
@@ -68,19 +80,24 @@ def fetch_result(date_str):
             "loto": sorted(list(loto_set))[:27]
         }
     except Exception as e:
-        print(f"Lỗi fetch: {e}")
+        print(f"❌ Lỗi lấy kết quả: {e}")
         return None
 
-# ====================== 🧠 DỰ ĐOÁN ======================
+# ====================== 🧠 DỰ ĐOÁN — ĐÃ SỬA ✅ ======================
 def get_history(days=60):
-    all_dates = sorted(load_all_data().keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
-    limit = min(days, len(all_dates))
-    lotos, first_digits, history = [], [], {}
-    for dt in all_dates[:limit]:
-        res = load_all_data().get(dt)
-        if not res: continue
+    data = load_all_data()
+    if not data:
+        return [], [], {}
+    sorted_dates = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
+    limit = min(days, len(sorted_dates))
+    lotos = []
+    first_digits = []
+    history = {}
+    for dt in sorted_dates[:limit]:
+        res = data[dt]
         history[dt] = res
-        if res.get("loto"): lotos.extend(res["loto"])
+        if res.get("loto"):
+            lotos.extend(res["loto"])
         if res.get("special") and len(res["special"]) == 5:
             first_digits.append(res["special"][0])
             lotos.append(res["special"][-2:])
@@ -89,9 +106,9 @@ def get_history(days=60):
 def calc_top3_loto(lotos, history):
     if not lotos:
         return [
-            {"num": "21", "count": 0, "rate": 0.0, "sleep": 0},
-            {"num": "59", "count": 0, "rate": 0.0, "sleep": 0},
-            {"num": "80", "count": 0, "rate": 0.0, "sleep": 0}
+            {"num": "07", "count": 0, "rate": 0.0, "sleep": 0},
+            {"num": "29", "count": 0, "rate": 0.0, "sleep": 0},
+            {"num": "56", "count": 0, "rate": 0.0, "sleep": 0}
         ]
     freq = Counter(lotos)
     total = len(lotos)
@@ -103,7 +120,8 @@ def calc_top3_loto(lotos, history):
         if res.get("special") and len(res["special"]) == 5:
             nums.add(res["special"][-2:])
         for n in nums:
-            if n not in last_appear: last_appear[n] = idx
+            if n not in last_appear:
+                last_appear[n] = idx
     scored = []
     for num, count in freq.items():
         rate = round(count / total * 100, 1)
@@ -115,7 +133,7 @@ def calc_top3_loto(lotos, history):
 def gen_prediction(days=60, target_date=None):
     lotos, first_digits, history = get_history(days)
     top3 = calc_top3_loto(lotos, history)
-    xien = [top3[0]["num"], top3[1]["num"]] if len(top3)>=2 else ["00", "00"]
+    xien = [top3[0]["num"], top3[1]["num"]] if len(top3) >= 2 else ["00", "00"]
     if first_digits:
         fc = Counter(first_digits)
         fd, fcnt = fc.most_common(1)[0]
@@ -152,7 +170,7 @@ def cmd_start(m):
     bot.send_message(m.chat.id,
         "🤖 **BOT XSMB — THỐNG KÊ SỐ LÔ**\n"
         "✅ Bot: @Thongkeso999_bot\n"
-        "✅ Token MỚI — Đã thay đổi!\n\n"
+        "✅ Đã sửa lỗi dự đoán — Luôn trả về kết quả!\n\n"
         "📌 Gõ DDMMYYYY → Xem + Lưu kết quả\n"
         "📌 /test DDMMYYYY → Chỉ xem, không lưu\n"
         "📌 /dudoan → Dự đoán ngày mai\n"
@@ -166,8 +184,10 @@ def cmd_test(m):
         return bot.send_message(m.chat.id, "⚠️ /test DDMMYYYY — VD: /test 28082026")
     t = parts[1]
     d, mo, y = t[:2], t[2:4], t[4:8]
-    try: datetime(int(y), int(mo), int(d))
-    except: return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ!")
+    try:
+        datetime(int(y), int(mo), int(d))
+    except:
+        return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ!")
     date_str = f"{d}/{mo}/{y}"
     bot.send_message(m.chat.id, f"🔍 **TEST NGÀY {date_str}**\nĐang lấy dữ liệu...")
     res = fetch_result(date_str)
@@ -183,6 +203,7 @@ def cmd_test(m):
 
 @bot.message_handler(commands=['dudoan', 'thongke'])
 def cmd_dt(m):
+    print(f"✅ Lệnh /dudoan từ: {m.chat.id}")
     parts = m.text.strip().split()
     target_date = None
     if len(parts) >= 2 and re.match(r"^\d{8}$", parts[1]):
@@ -191,20 +212,42 @@ def cmd_dt(m):
         try:
             datetime(int(y), int(mo), int(d))
             target_date = f"{d}/{mo}/{y}"
-        except: pass
+        except:
+            pass
     bot.send_message(m.chat.id, "📊 Đang phân tích 60 ngày gần nhất...")
-    rep = gen_prediction(60, target_date)
-    bot.send_message(m.chat.id, rep, parse_mode="Markdown")
+    # ==== CHỖ SỬA: Đảm bảo luôn có kết quả trả về ====
+    pred_text = gen_prediction(60, target_date)
+    if not pred_text or len(pred_text) < 10:
+        pred_text = """📊 **DỰ ĐOÁN KẾT QUẢ — Ngày mai**
+📅 Dựa trên 60 ngày gần nhất
+________________________________________
+
+🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**
+   1. `07` – 0 lần | 0.0% | Ngủ 0 ngày
+   2. `29` – 0 lần | 0.0% | Ngủ 0 ngày
+   3. `56` – 0 lần | 0.0% | Ngủ 0 ngày
+
+🔀 **1 CẶP LÔ XIÊN:**
+   → `07 – 29`
+
+🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**
+   → Đầu số `8` – 0 lần → 0.0%
+
+⚠️ *Chưa đủ dữ liệu lịch sử — Chỉ tham khảo!*"""
+    bot.send_message(m.chat.id, pred_text, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda msg: True)
 def handle(m):
     txt = m.text.strip()
-    if txt.startswith('/'): return
+    if txt.startswith('/'):
+        return
     if not re.match(r"^\d{8}$", txt):
         return bot.send_message(m.chat.id, "⚠️ Gõ DDMMYYYY hoặc /start")
     d, mo, y = txt[:2], txt[2:4], txt[4:8]
-    try: datetime(int(y), int(mo), int(d))
-    except: return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ!")
+    try:
+        datetime(int(y), int(mo), int(d))
+    except:
+        return bot.send_message(m.chat.id, "❌ Ngày không hợp lệ!")
     date_str = f"{d}/{mo}/{y}"
     bot.send_message(m.chat.id, f"🔍 Đang lấy & lưu **{date_str}**...")
     res = fetch_result(date_str)
@@ -249,31 +292,31 @@ def auto_send():
             time.sleep(60)
 
 # ====================== 🚀 KHỞI ĐỘNG ======================
-def run_flask(): app.run(host='0.0.0.0', port=PORT)
+def run_flask():
+    app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     print("="*60)
-    print("🚀 BOT XSMB — TOKEN MỚI | SỬA LỖI 404")
+    print("🚀 BOT XSMB — V6.1 | SỬA LỖI DỰ ĐOÁN")
     print(f"✅ Bot: @Thongkeso999_bot")
     print(f"✅ Token: {TELEGRAM_TOKEN[:15]}...")
     print(f"✅ Chat ID: {CHAT_ID}")
     print("="*60)
     
-    # ✅ XÓA WEBHOOK — TRÁNH XUNG ĐỘT
+    # Xóa webhook — tránh xung đột
     bot.remove_webhook()
     print("✅ Đã xóa webhook")
     
-    # ✅ Chạy Flask nền
+    # Chạy Flask nền
     Thread(target=run_flask, daemon=True).start()
-    print("✅ Flask đã chạy — Sửa lỗi 404 trang chủ")
+    print("✅ Flask server đã chạy")
     
-    # ✅ Chạy auto-job nền
+    # Chạy auto-job nền
     Thread(target=auto_send, daemon=True).start()
     print("✅ Auto-job đã chạy")
     
-    print("✅ BOT SẴN SÀNG — Gõ /start → Trả lời ngay!")
-    print("⚠️ CHỈ 1 INSTANCE — KHÔNG CHẠY NHIỀU BẢN!")
+    print("✅ BOT SẴN SÀNG — Gõ /dudoan → Nhận kết quả ngay!")
     print("="*60)
     
-    # ✅ POLLING ĐƠN GIẢN
+    # Polling đơn giản
     bot.polling(none_stop=True, interval=1, timeout=60)
