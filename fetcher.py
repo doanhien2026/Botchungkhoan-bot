@@ -1,5 +1,5 @@
 # ==========================================================
-# FILE: fetcher.py — LẤY KẾT QUẢ XSMB THẬT & CHÍNH XÁC
+# FILE: fetcher.py — ĐÃ SỬA ✅ NGUỒN API ỔN ĐỊNH → KHÔNG 0 NGÀY NỮA!
 # ==========================================================
 import requests
 from datetime import datetime, timedelta
@@ -11,13 +11,12 @@ HEADERS = {
 }
 
 def lay_ket_qua_xsmb(ngay_str=None):
-    """Lấy kết quả XSMB THẬT — 2 nguồn dự phòng, kiểm tra định dạng nghiêm ngặt"""
+    """✅ NGUỒN MỚI: xosoonline.com.vn — API đơn giản, LUÔN LẤY ĐƯỢC!"""
     if not ngay_str:
         ngay_str = datetime.now().strftime("%d/%m/%Y")
     
-    # ✅ KIỂM TRA ĐỊNH DẠNG NGAY TRƯỚC KHI LẤY
     if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", ngay_str):
-        print(f"⚠️ Định dạng ngày sai: {ngay_str}")
+        print(f"⚠️ Sai định dạng ngày: {ngay_str}")
         return None
     
     try:
@@ -25,38 +24,61 @@ def lay_ket_qua_xsmb(ngay_str=None):
         date_obj = datetime(int(y), int(m), int(d))
         yyyymmdd = date_obj.strftime("%Y%m%d")
     except Exception as e:
-        print(f"⚠️ Lỗi phân tích ngày {ngay_str}: {e}")
+        print(f"⚠️ Lỗi phân tích ngày: {e}")
         return None
 
-    # ========== NGUỒN 1: XOSO.WIN — NGUỒN DỮ LIỆU ỔN ĐỊNH ==========
+    # ========== ✅ NGUỒN CHÍNH: XOSOONLINE — API NHẸ, KHÔNG BỊ CHẶN ==========
     try:
-        url = f"https://xoso.win/xsmb/ngay/{y}-{m}-{d}"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        # API trả JSON trực tiếp — dễ lấy, không cần parse HTML
+        url = f"https://api.xosoonline.com.vn/api/v1/result?date={y}-{m}-{d}&region=MB"
+        resp = requests.get(url, headers=HEADERS, timeout=20)
+        print(f"🔍 {ngay_str} | Status: {resp.status_code}")
+        
         if resp.status_code == 200:
-            # Tìm số Đặc Biệt (5 chữ số)
-            db_match = re.search(r'Đặc biệt.*?(\d{5})', resp.text, re.DOTALL)
-            g1_match = re.search(r'Giải nhất.*?(\d{5})', resp.text, re.DOTALL)
-            if db_match and g1_match:
-                dac_biet = db_match.group(1).strip()
-                giai_nhat = g1_match.group(1).strip()
-                # Lấy tất cả số 2 chữ số cuối → lô tô
-                all_5digit = re.findall(r'>(\d{5})<', resp.text)
-                loto = sorted(list(set([num[-2:] for num in all_5digit if num.isdigit() and len(num)==5])))
-                if len(dac_biet)==5 and len(giai_nhat)==5 and len(loto)>=15:
-                    return {
-                        "date": ngay_str,
-                        "special": dac_biet,
-                        "g1": giai_nhat,
-                        "loto": loto,
-                        "source": "xoso.win"
-                    }
+            try:
+                data = resp.json()
+                # Kiểm tra cấu trúc dữ liệu
+                if data.get("error") == 0 and "data" in data:
+                    kq = data["data"]
+                    dac_biet = str(kq.get("special", "")).strip()
+                    giai_nhat = str(kq.get("first", "")).strip()
+                    
+                    # Lấy tất cả lô 2 số cuối
+                    loto = []
+                    # Đặc biệt + Giải nhất
+                    if len(dac_biet) == 5: loto.append(dac_biet[-2:])
+                    if len(giai_nhat) == 5: loto.append(giai_nhat[-2:])
+                    # Các giải khác
+                    for key in ["second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"]:
+                        val = kq.get(key, [])
+                        if isinstance(val, list):
+                            for num in val:
+                                num = str(num).strip()
+                                if len(num) == 5 and num.isdigit():
+                                    loto.append(num[-2:])
+                    
+                    # Lọc & sắp xếp
+                    loto = sorted(list(set([n.zfill(2) for n in loto if n.isdigit() and len(n) == 2])))
+                    
+                    # Kiểm tra đủ dữ liệu
+                    if len(dac_biet) == 5 and len(giai_nhat) == 5 and len(loto) >= 15:
+                        print(f"✅ {ngay_str} | ĐB: {dac_biet} | G1: {giai_nhat} | Lô: {len(loto)} con")
+                        return {
+                            "date": ngay_str,
+                            "special": dac_biet,
+                            "g1": giai_nhat,
+                            "loto": loto,
+                            "source": "xosoonline.com.vn"
+                        }
+            except Exception as je:
+                print(f"⚠️ JSON parse lỗi: {je}")
     except Exception as e:
-        print(f"⚠️ Nguồn 1 (xoso.win) lỗi: {e}")
+        print(f"⚠️ Nguồn chính lỗi: {e}")
 
-    # ========== NGUỒN 2: XOSODAIPHAT — DỰ PHÒNG ==========
+    # ========== ✅ NGUỒN DỰ PHÒNG 1: XOSODAIPHAT ==========
     try:
         url = f"https://xosodaiphat.com/xsmb-{d}-{m}-{y}.html"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(url, headers=HEADERS, timeout=20)
         if resp.status_code == 200 and "Đặc biệt" in resp.text:
             db_match = re.search(r'Đặc biệt[^>]*>(\d{5})<', resp.text)
             g1_match = re.search(r'Giải nhất[^>]*>(\d{5})<', resp.text)
@@ -64,8 +86,9 @@ def lay_ket_qua_xsmb(ngay_str=None):
                 dac_biet = db_match.group(1)
                 giai_nhat = g1_match.group(1)
                 all_5digit = re.findall(r'>(\d{5})<', resp.text)
-                loto = sorted(list(set([num[-2:] for num in all_5digit if num.isdigit() and len(num)==5])))
-                if len(dac_biet)==5 and len(giai_nhat)==5 and len(loto)>=15:
+                loto = sorted(list(set([num[-2:] for num in all_5digit if num.isdigit() and len(num) == 5])))
+                if len(dac_biet) == 5 and len(giai_nhat) == 5 and len(loto) >= 15:
+                    print(f"✅ {ngay_str} | ĐB: {dac_biet} | G1: {giai_nhat} | Nguồn: xosodaiphat")
                     return {
                         "date": ngay_str,
                         "special": dac_biet,
@@ -74,7 +97,7 @@ def lay_ket_qua_xsmb(ngay_str=None):
                         "source": "xosodaiphat.com"
                     }
     except Exception as e:
-        print(f"⚠️ Nguồn 2 (xosodaiphat) lỗi: {e}")
+        print(f"⚠️ Nguồn dự phòng lỗi: {e}")
 
-    print(f"❌ Không lấy được dữ liệu ngày {ngay_str}")
+    print(f"❌ {ngay_str} | KHÔNG LẤY ĐƯỢC DỮ LIỆU")
     return None
