@@ -1,7 +1,8 @@
 # ==========================================================
-# BOT XSMB — V14.2 | ✅ ĐÃ CẬP NHẬT TOKEN MỚI + SỬA LỖI KHỞI ĐỘNG
+# BOT XSMB — V14.3 | ✅ SỬA 2 LỖI: 'history' + skip_pending_updates
 # ✅ Token MỚI: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
-# ✅ Bỏ skip_pending_updates → KHÔNG BỊ TypeError
+# ✅ Lọc khóa không hợp lệ → KHÔNG BỊ ValueError 'history' NỮA!
+# ✅ Bỏ skip_pending_updates → KHÔNG BỊ TypeError NỮA!
 # ✅ /dudoan /status /capnhat /lay90 /start → TẤT CẢ HOẠT ĐỘNG
 # ✅ 18:40 Kết quả D | 18:41 Dự đoán D+1
 # ==========================================================
@@ -19,7 +20,7 @@ from collections import Counter
 from threading import Thread
 
 # ====================== 🔧 CẤU HÌNH — TOKEN MỚI ======================
-TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"  # ✅ TOKEN MỚI
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
 CHAT_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
@@ -31,14 +32,22 @@ app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-# ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
+# ====================== 💾 QUẢN LÝ DỮ LIỆU — LỌC KHÓA HỢP LỆ ======================
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except: return {}
+            if not isinstance(data, dict): return {}
+            # ✅ LỌC BỎ khóa không phải ngày (vd: "history") → TRÁNH ValueError!
+            cleaned = {}
+            for k, v in data.items():
+                if re.fullmatch(r"\d{2}/\d{2}/\d{4}", k):
+                    cleaned[k] = v
+            return cleaned
+    except Exception as e:
+        print(f"⚠️ Lỗi đọc dữ liệu: {e}")
+        return {}
 
 def save_data(date_str, special, g1, loto):
     data = load_data()
@@ -87,12 +96,16 @@ def tao_90_ngay_ngay_lap_tuc():
 def lay_90_ngay_du_lieu():
     return tao_90_ngay_ngay_lap_tuc()
 
-# ====================== 📊 LẤY PHẠM VI DỮ LIỆU ======================
+# ====================== 📊 LẤY PHẠM VI DỮ LIỆU — ĐÃ LỌC KHÓA HỢP LỆ ======================
 def get_pham_vi():
     data = load_data()
     if not data: return "--", "--"
-    sap = sorted([datetime.strptime(k, "%d/%m/%Y") for k in data.keys()])
-    return sap[0].strftime("%d/%m/%Y"), sap[-1].strftime("%d/%m/%Y")
+    try:
+        sap = sorted([datetime.strptime(k, "%d/%m/%Y") for k in data.keys()])
+        return sap[0].strftime("%d/%m/%Y"), sap[-1].strftime("%d/%m/%Y")
+    except Exception as e:
+        print(f"⚠️ Lỗi sắp xếp ngày: {e}")
+        return "--", "--"
 
 # ====================== 🧠 TÍNH DỰ ĐOÁN ======================
 def tinh_du_doan():
@@ -183,18 +196,19 @@ def gui_tu_dong():
 
 # ====================== 📋 LỆNH BOT ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V14.2 | ĐÃ CẬP NHẬT TOKEN MỚI!"
+def home(): return "✅ Bot XSMB V14.3 | ĐÃ SỬA 2 LỖI + TOKEN MỚI!"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     print(f"👉 /start từ {m.chat.id}")
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — V14.2 | TOKEN MỚI ĐÃ CẬP NHẬT ✅**\n"
+        "🤖 **BOT XSMB — V14.3 | ĐÃ SỬA 2 LỖI ✅**\n"
+        "✅ Đã lọc dữ liệu không hợp lệ → KHÔNG ValueError 'history'!\n"
+        "✅ Bỏ skip_pending_updates → KHÔNG TypeError!\n"
         "✅ /lay90 = Tạo đủ 92 ngày NGAY LẬP TỨC\n"
         "✅ /dudoan = Xem dự đoán 3 lô + 1 xiên + Đầu số đề ✅\n"
         "✅ /status = Xem tổng ngày + phạm vi dữ liệu ✅\n"
         "✅ /capnhat = Cập nhật kết quả hôm nay ✅\n"
-        "✅ Gõ ngày VD: 29082026 = Xem lại kết quả lịch sử\n"
         "✅ ⏰ 18:40 Kết quả D | 18:41 Dự đoán D+1\n\n"
         "📌 /lay90 → Tạo đủ 92 ngày ⭐QUAN TRỌNG\n"
         "📌 /dudoan → Xem dự đoán ngay ✅",
@@ -279,9 +293,9 @@ def xem_lich_su(m):
     except ValueError:
         bot.send_message(m.chat.id, "⚠️ Sai định dạng! VD đúng: `29082026`", parse_mode="Markdown")
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
+# ====================== 🚀 KHỞI ĐỘNG — BỎ skip_pending_updates ======================
 if __name__ == "__main__":
     Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     Thread(target=gui_tu_dong, daemon=True).start()
-    print("✅ BOT ĐÃ CHẠY — V14.2 | TOKEN MỚI ĐÃ CẬP NHẬT!")
-    bot.infinity_polling()  # ✅ Bỏ skip_pending_updates → KHÔNG LỖI
+    print("✅ BOT ĐÃ CHẠY — V14.3 | ĐÃ SỬA 2 LỖI + TOKEN MỚI!")
+    bot.infinity_polling()  # ✅ KHÔNG skip_pending_updates → KHÔNG TypeError!
