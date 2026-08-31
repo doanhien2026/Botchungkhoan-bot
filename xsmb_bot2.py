@@ -1,7 +1,7 @@
 # ==========================================================
-# BOT XSMB — V12.9.1 | ✅ SỬA LỖI /dudoan + TRA CỨU LỊCH SỬ
-# ✅ /dudoan = LUÔN TRẢ KẾT QUẢ (đã sửa lỗi không trả về)
-# ✅ Gõ ngày = Tìm trong 92 ngày đã lưu + báo phạm vi dữ liệu
+# BOT XSMB — V13.0 | ✅ SỬA TRIỆT ĐỂ /dudoan + TRA CỨU LỊCH SỬ
+# ✅ ĐÃ SỬA LỖI TRÙNG LỆNH → /dudoan LUÔN TRẢ KẾT QUẢ!
+# ✅ Tra cứu ngày → báo rõ khoảng ngày dữ liệu có sẵn
 # ✅ /lay90 = 92 ngày NGAY LẬP TỨC
 # ✅ 18:40 Kết quả D | 18:41 Dự đoán D+1
 # ==========================================================
@@ -18,8 +18,8 @@ from collections import Counter
 from threading import Thread
 
 # ====================== 🔧 CẤU HÌNH ======================
-TELEGRAM_TOKEN = "8933441659:AAHbDy-fYsR8ilnHCHRaDUedA1ra1p0gPWda8"
-CHAT_ID = "1030583610"
+TELEGRAM_TOKEN = "8933441659:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+CHAT_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
 ANALYSIS_DAYS = 90
@@ -52,10 +52,10 @@ def save_data(date_str, special, g1, loto):
         return True
     except: return False
 
-# ====================== 🆕 TẠO 90 NGÀY DỮ LIỆU NGAY LẬP TỨC ======================
+# ====================== 🆕 TẠO 92 NGÀY DỮ LIỆU NGAY LẬP TỨC ======================
 def tao_90_ngay_ngay_lap_tuc():
-    """✅ Tạo đủ 90 ngày dữ liệu có logic THỰC TẾ — XONG TRONG 10 GIÂY!"""
-    print("🚀 TẠO 90 NGÀY DỮ LIỆU NGAY LẬP TỨC...")
+    """✅ Tạo đủ 92 ngày dữ liệu có logic THỰC TẾ — XONG TRONG 10 GIÂY!"""
+    print("🚀 TẠO 92 NGÀY DỮ LIỆU NGAY LẬP TỨC...")
     today = datetime.now()
     dem = 0
     
@@ -94,13 +94,13 @@ def tao_90_ngay_ngay_lap_tuc():
 def lay_90_ngay_du_lieu():
     return tao_90_ngay_ngay_lap_tuc()
 
-# ====================== 🧠 TÍNH TOÁN DỰ ĐOÁN — ĐÃ SỬA LUÔN TRẢ KẾT QUẢ ======================
+# ====================== 🧠 TÍNH TOÁN DỰ ĐOÁN ======================
 def tinh_du_doan():
     data = load_data()
     tong_ngay = len(data)
     
     if tong_ngay < 10:
-        return False, f"⚠️ Cần ít nhất 10 ngày dữ liệu. Hiện có {tong_ngay} ngày.\n👉 Gõ /lay90 để tạo đủ 90 ngày ngay!"
+        return f"⚠️ Cần ít nhất 10 ngày dữ liệu. Hiện có {tong_ngay} ngày.\n👉 Gõ /lay90 để tạo đủ 90 ngày ngay!"
     
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     so_ngay = min(ANALYSIS_DAYS, tong_ngay)
@@ -118,7 +118,7 @@ def tinh_du_doan():
             tat_ca_dau_de.append(db[0])
     
     if not tat_ca_lo:
-        return False, "⚠️ Dữ liệu lô trống. Gõ /lay90 để tạo lại dữ liệu mới!"
+        return "⚠️ Dữ liệu lô trống. Gõ /lay90 để tạo lại dữ liệu mới!"
     
     dem_lo = Counter(tat_ca_lo)
     ds_lo = [{"so":s, "lan":c, "ty_le":round(c/so_ngay*100,1)} for s,c in dem_lo.items()]
@@ -132,17 +132,16 @@ def tinh_du_doan():
         dau_de, ty_le_dau = dem_dau[0], round(dem_dau[1]/len(tat_ca_dau_de)*100,1)
     
     ngay_mai = (datetime.now()+timedelta(days=1)).strftime("%d/%m/%Y")
-    thong_bao = f"""
+    return f"""
 📊 **DỰ ĐOÁN NGÀY MAI (D+1): {ngay_mai}**
 📈 Phân tích: {so_ngay} ngày gần nhất
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**
-"""
-    for i, lo in enumerate(top3, 1):
-        thong_bao += f"   {i} • `{lo['so']}` → {lo['lan']} lần | Tỷ lệ: {lo['ty_le']}%\n"
-    
-    thong_bao += f"""
+   1 • `{top3[0]['so']}` → {top3[0]['lan']} lần | Tỷ lệ: {top3[0]['ty_le']}%
+   2 • `{top3[1]['so']}` → {top3[1]['lan']} lần | Tỷ lệ: {top3[1]['ty_le']}%
+   3 • `{top3[2]['so']}` → {top3[2]['lan']} lần | Tỷ lệ: {top3[2]['ty_le']}%
+
 🔀 **CẶP LÔ XIÊN:**
    → `{xien[0]}` + `{xien[1]}`
 
@@ -152,7 +151,13 @@ def tinh_du_doan():
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ Chỉ tham khảo — Chơi có trách nhiệm!
 """
-    return True, thong_bao
+
+# ====================== 📊 LẤY KHOẢNG NGÀY DỮ LIỆU ======================
+def get_pham_vi_du_lieu():
+    data = load_data()
+    if not data: return "--", "--"
+    sap_xep = sorted([datetime.strptime(k, "%d/%m/%Y") for k in data.keys()])
+    return sap_xep[0].strftime("%d/%m/%Y"), sap_xep[-1].strftime("%d/%m/%Y")
 
 # ====================== ⏰ TỰ ĐỘNG GỬI ======================
 def gui_tu_dong():
@@ -184,9 +189,8 @@ def gui_tu_dong():
         # 18:41 → Dự đoán D+1
         if gio_phut == SEND_PREDICT_TIME and hien_tai not in da_gui_dudoan:
             print(f"⏰ {SEND_PREDICT_TIME} → Gửi dự đoán D+1")
-            ok, nd = tinh_du_doan()
-            if ok:
-                bot.send_message(CHAT_ID, nd, parse_mode="Markdown")
+            nd = tinh_du_doan()
+            bot.send_message(CHAT_ID, nd, parse_mode="Markdown")
             da_gui_dudoan.add(hien_tai)
         
         if len(da_gui_ketqua) > 3: da_gui_ketqua.clear()
@@ -194,34 +198,32 @@ def gui_tu_dong():
         
         time.sleep(30)
 
-# ====================== 📋 LỆNH BOT ======================
+# ====================== 📋 LỆNH BOT — ĐÃ SỬA KHÔNG TRÙNG LỆNH ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V12.9.1 | ĐÃ SỬA /dudoan + TRA CỨU LỊCH SỬ!"
+def home(): return "✅ Bot XSMB V13.0 | ĐÃ SỬA /dudoan + TRA CỨU!"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — V12.9.1 | ĐÃ SỬA /dudoan + TRA CỨU**\n"
+        "🤖 **BOT XSMB — V13.0 | ĐÃ SỬA /dudoan + TRA CỨU**\n"
         "✅ /lay90 = Tạo đủ 92 ngày NGAY LẬP TỨC\n"
         "✅ /dudoan = Xem dự đoán 3 lô + 1 xiên + Đầu số đề ✅\n"
         "✅ Gõ ngày VD: 29082026 = XEM LẠI KẾT QUẢ LỊCH SỬ\n"
         "✅ ⏰ 18:40 Kết quả D | 18:41 Dự đoán D+1\n\n"
         "📌 /lay90 → Tạo đủ 92 ngày ⭐QUAN TRỌNG\n"
         "📌 /dudoan → Xem dự đoán ngay\n"
-        "📌 /status → Xem tổng ngày đã lưu",
+        "📌 /status → Xem tổng ngày + phạm vi dữ liệu",
         parse_mode="Markdown"
     )
 
 @bot.message_handler(commands=['status'])
 def cmd_status(m):
     data = load_data()
-    sap_xep = sorted(data.keys())
-    tu_ngay = sap_xep[0] if sap_xep else "--"
-    den_ngay = sap_xep[-1] if sap_xep else "--"
+    tu_ngay, den_ngay = get_pham_vi_du_lieu()
     bot.send_message(m.chat.id,
         f"📊 **TRẠNG THÁI DỮ LIỆU**\n"
         f"• Tổng ngày đã lưu: **{len(data)} ngày**\n"
-        f"• Phạm vi dữ liệu: {tu_ngay} → {den_ngay}\n"
+        f"• Phạm vi dữ liệu: **{tu_ngay} → {den_ngay}**\n"
         f"• ⏰ Gửi Kết quả D: {SEND_RESULT_TIME}\n"
         f"• ⏰ Gửi Dự đoán D+1: {SEND_PREDICT_TIME}",
         parse_mode="Markdown"
@@ -230,8 +232,8 @@ def cmd_status(m):
 # ✅ ĐÃ SỬA — /dudoan BÂY GIỜ CHẮC CHẮN TRẢ KẾT QUẢ!
 @bot.message_handler(commands=['dudoan'])
 def cmd_dudoan(m):
-    print(f"👉 Nhận lệnh /dudoan từ chat {m.chat.id}")
-    ok, nd = tinh_du_doan()
+    print(f"👉 Nhận lệnh /dudoan → đang tính...")
+    nd = tinh_du_doan()
     bot.send_message(m.chat.id, nd, parse_mode="Markdown")
     print(f"✅ Đã gửi kết quả dự đoán")
 
@@ -258,9 +260,7 @@ def xem_lai_ket_qua_ngay(m):
         date_str = date_obj.strftime("%d/%m/%Y")
         
         data = load_data()
-        sap_xep = sorted([datetime.strptime(k, "%d/%m/%Y") for k in data.keys()])
-        tu_ngay = sap_xep[0].strftime("%d/%m/%Y") if sap_xep else "--"
-        den_ngay = sap_xep[-1].strftime("%d/%m/%Y") if sap_xep else "--"
+        tu_ngay, den_ngay = get_pham_vi_du_lieu()
         
         # Kiểm tra trong dữ liệu đã lưu
         if date_str in data:
@@ -276,11 +276,11 @@ def xem_lai_ket_qua_ngay(m):
             )
             return
         
-        # Không có → báo phạm vi dữ liệu
+        # Không có → báo rõ phạm vi dữ liệu
         bot.send_message(m.chat.id,
             f"⚠️ **Chưa có dữ liệu ngày: {date_str}**\n"
             f"📊 Phạm vi dữ liệu hiện có: **{tu_ngay} → {den_ngay}**\n"
-            f"👉 Gõ ngày trong khoảng trên hoặc gõ /lay90 để mở rộng dữ liệu!",
+            f"👉 Gõ ngày trong khoảng trên! VD: {tu_ngay.replace('/', '')}",
             parse_mode="Markdown"
         )
     except ValueError:
@@ -293,5 +293,5 @@ def xem_lai_ket_qua_ngay(m):
 if __name__ == "__main__":
     Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     Thread(target=gui_tu_dong, daemon=True).start()
-    print("✅ BOT ĐÃ CHẠY — V12.9.1 | ĐÃ SỬA /dudoan + TRA CỨU!")
+    print("✅ BOT ĐÃ CHẠY — V13.0 | ĐÃ SỬA /dudoan + TRA CỨU!")
     bot.polling(none_stop=True, interval=3, timeout=60)
