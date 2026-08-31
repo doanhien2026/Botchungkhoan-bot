@@ -22,7 +22,7 @@ from collections import Counter
 from threading import Thread
 
 # ====================== 🔧 CẤU HÌNH ======================
-TELEGRAM_TOKEN = "8901722608:AAHnHfYsR8ilnHCHRaDUedA1ra1p0gPWda8"
+TELEGRAM_TOKEN = "8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w"
 CHAT_ID = "-1001030583610"
 PORT = int(os.environ.get("PORT", 10000))
 DATA_FILE = "xsmb_data.json"
