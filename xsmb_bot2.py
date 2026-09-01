@@ -1,6 +1,5 @@
 # ==========================================================
-# BOT XSMB — V19.0 | ✅ HOÀN TOÀN TỰ ĐỘNG — BỎ NHẬP THỦ CÔNG!
-# Tự kiểm tra + tự lấy + tự cập nhật 90 ngày dữ liệu thật | Không tạo số giả
+# BOT XSMB — V20.0 | ✅ SỬA LỖI DỮ LIỆU + LỖI TELEGRAM + TỰ ĐỘNG
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Chat ID: -1001030583610
 # ==========================================================
@@ -22,9 +21,9 @@ SEND_RESULT_TIME = "18:40"
 SEND_PREDICT_TIME = "18:41"
 
 app = Flask(__name__)
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
 
-# ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
+# ====================== 💾 QUẢN LÝ DỮ LIỆU — SỬA LỖI LƯU ======================
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
@@ -34,18 +33,20 @@ def load_data():
             cleaned = {}
             for k, v in data.items():
                 if re.fullmatch(r"\d{2}/\d{2}/\d{4}", k):
-                    if isinstance(v, dict) and "special" in v and "g1" in v and "loto" in v:
-                        if len(v.get("special",""))==5 and len(v.get("g1",""))==5 and len(v.get("loto",[]))>=25:
+                    if isinstance(v, dict) and "special" in v and "g1" in v:
+                        if len(v.get("special",""))==5 and len(v.get("g1",""))==5:
                             cleaned[k] = v
             return cleaned
-    except:
+    except Exception as e:
+        print(f"⚠️ File lỗi → tạo mới: {e}")
+        try: os.remove(DATA_FILE)
+        except: pass
         return {}
 
 def save_data(date_str, special, g1, loto, source="api"):
     if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", date_str): return False
     if len(special)!=5 or not special.isdigit(): return False
     if len(g1)!=5 or not g1.isdigit(): return False
-    if len(loto) < 25: return False
     data = load_data()
     data[date_str] = {
         "special": special.strip(),
@@ -58,22 +59,20 @@ def save_data(date_str, special, g1, loto, source="api"):
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
-    except:
+    except Exception as e:
+        print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ====================== 🆕 TỰ ĐỘNG KIỂM TRA + LẤY 90 NGÀY ======================
+# ====================== 🆕 TỰ ĐỘNG LẤY 90 NGÀY ======================
 def tu_dong_lay_90ngay():
-    print("🚀 TỰ ĐỘNG KIỂM TRA + LẤY 90 NGÀY DỮ LIỆU THẬT...")
+    print("🚀 TỰ ĐỘNG LẤY 90 NGÀY DỮ LIỆU...")
     today = datetime.now()
-    dem_lay_moi = 0
-    dem_da_co = 0
-    dem_that_bai = 0
+    dem_lay_moi = dem_da_co = dem_that_bai = 0
     data = load_data()
 
     for offset in range(1, ANALYSIS_DAYS + 1):
         target_date = today - timedelta(days=offset)
         date_str = target_date.strftime("%d/%m/%Y")
-        
         if date_str in data:
             dem_da_co += 1
             continue
@@ -81,15 +80,14 @@ def tu_dong_lay_90ngay():
         kq = lay_ket_qua_xsmb(date_str)
         if kq and save_data(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
             dem_lay_moi += 1
-            print(f"✅ [{dem_lay_moi}] {date_str} | ĐB:{kq['special']} | {len(kq['loto'])} lô")
+            print(f"✅ [{dem_lay_moi}] {date_str} | ĐB:{kq['special']}")
         else:
             dem_that_bai += 1
-            print(f"❌ {date_str} | KHÔNG LẤY ĐƯỢC — Bỏ qua, không lưu số giả!")
-        
-        time.sleep(1.2)  # Không bị chặn
+            print(f"❌ {date_str} | KHÔNG LẤY ĐƯỢC")
+        time.sleep(1)
     
     tong = len(load_data())
-    print(f"\n✅ HOÀN THÀNH! Tổng: {tong} ngày | Đã có: {dem_da_co} | Lấy mới: {dem_lay_moi} | Thất bại: {dem_that_bai}")
+    print(f"✅ HOÀN THÀNH! Tổng: {tong} ngày | Đã có: {dem_da_co} | Lấy mới: {dem_lay_moi} | Thất bại: {dem_that_bai}")
     return tong, dem_lay_moi, dem_that_bai
 
 # ====================== 📊 TÍNH DỰ ĐOÁN ======================
@@ -105,7 +103,7 @@ def tinh_du_doan():
     data = load_data()
     tong = len(data)
     if tong < 30:
-        return f"⚠️ Cần ít nhất 30 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để tự động lấy đủ dữ liệu!"
+        return f"⚠️ Cần ít nhất 30 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để lấy!"
     
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     so_ngay = min(ANALYSIS_DAYS, tong)
@@ -122,7 +120,7 @@ def tinh_du_doan():
             tat_ca_dau.append(db[0])
     
     if not tat_ca_lo:
-        return "⚠️ Dữ liệu lô trống. Gõ /lay90 để lấy dữ liệu!"
+        return "⚠️ Dữ liệu lô trống."
     
     dem_lo = Counter(tat_ca_lo)
     ds_lo = [{"so":s, "lan":c, "ty_le":round(c/so_ngay*100,1)} for s,c in dem_lo.items()]
@@ -137,23 +135,18 @@ def tinh_du_doan():
     
     ngay_mai = (datetime.now()+timedelta(days=1)).strftime("%d/%m/%Y")
     return f"""
-📊 **DỰ ĐOÁN NGÀY MAI (D+1): {ngay_mai}**
-📈 Phân tích: {so_ngay} ngày dữ liệu THẬT (đủ 27 con lô/ngày)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 *DỰ ĐOÁN NGÀY MAI: {ngay_mai}*
+📈 Phân tích: {so_ngay} ngày dữ liệu thật
 
-🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**
-   1 • `{top3[0]['so']}` → {top3[0]['lan']} lần | Tỷ lệ: {top3[0]['ty_le']}%
-   2 • `{top3[1]['so']}` → {top3[1]['lan']} lần | Tỷ lệ: {top3[1]['ty_le']}%
-   3 • `{top3[2]['so']}` → {top3[2]['lan']} lần | Tỷ lệ: {top3[2]['ty_le']}%
+🎯 *3 CON LÔ TỶ LỆ CAO NHẤT:*
+   1 • `{top3[0]['so']}` → {top3[0]['lan']} lần | {top3[0]['ty_le']}%
+   2 • `{top3[1]['so']}` → {top3[1]['lan']} lần | {top3[1]['ty_le']}%
+   3 • `{top3[2]['so']}` → {top3[2]['lan']} lần | {top3[2]['ty_le']}%
 
-🔀 **CẶP LÔ XIÊN:**
-   → `{xien[0]}` + `{xien[1]}`
+🔀 *XIÊN:* `{xien[0]}` + `{xien[1]}`
+🔢 *ĐẦU ĐỀ:* `{dau_de}` | {ty_le_dau}%
 
-🔢 **ĐẦU SỐ ĐỀ DỰ KIẾN:**
-   → `{dau_de}` | Tỷ lệ: {ty_le_dau}%
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ Dữ liệu từ nguồn thật — Chỉ tham khảo!
+⚠️ Chỉ tham khảo!
 """
 
 # ====================== ⏰ TỰ ĐỘNG GỬI ======================
@@ -169,8 +162,8 @@ def gui_tu_dong():
                 kq = lay_ket_qua_xsmb(hom_nay)
                 if kq and save_data(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                     bot.send_message(CHAT_ID,
-                        f"🏆 **KẾT QUẢ NGÀY D — {hom_nay}**\n"
-                        f"🎯 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq['source']}",
+                        f"🏆 *KẾT QUẢ NGÀY: {hom_nay}*\n"
+                        f"🎯 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
                         parse_mode="Markdown"
                     )
                 da_gui_kq.add(hom_nay)
@@ -179,27 +172,24 @@ def gui_tu_dong():
                 bot.send_message(CHAT_ID, tinh_du_doan(), parse_mode="Markdown")
                 da_gui_dd.add(hom_nay)
             
-            if len(da_gui_kq) > 3: da_gui_kq.clear()
-            if len(da_gui_dd) > 3: da_gui_dd.clear()
             time.sleep(30)
         except Exception as e:
-            print(f"⚠️ Lỗi: {e}")
+            print(f"⚠️ Lỗi gửi: {e}")
             time.sleep(10)
 
-# ====================== 📋 LỆNH BOT — BỎ NHẬP THỦ CÔNG! ======================
+# ====================== 📋 LỆNH BOT ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V19.0 | HOÀN TOÀN TỰ ĐỘNG!"
+def home(): return "✅ Bot XSMB V20.0 | ĐÃ SỬA LỖI DỮ LIỆU!"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 **BOT XSMB — V19.0 | HOÀN TOÀN TỰ ĐỘNG ✅**\n"
-        "✅ /lay90 = Tự động lấy 90 ngày dữ liệu thật\n"
-        "✅ /dudoan = Dự đoán từ dữ liệu thật\n"
-        "✅ /status = Xem trạng thái dữ liệu\n"
-        "✅ Ngày VD: 29082026 → Xem kết quả đã lưu\n"
-        "✅ ⏰ 18:40 Kết quả D | 18:41 Dự đoán D+1\n\n"
-        "📌 Gõ /lay90 → bắt đầu tự động lấy dữ liệu! ⭐",
+        "🤖 *BOT XSMB — V20.0 | SỬA LỖI DỮ LIỆU ✅*\n"
+        "/lay90 = Tự động lấy 90 ngày dữ liệu thật\n"
+        "/dudoan = Xem dự đoán\n"
+        "/status = Xem trạng thái dữ liệu\n"
+        "Ngày VD: 29082026 → Xem kết quả\n\n"
+        "📌 Gõ /lay90 → bắt đầu!",
         parse_mode="Markdown"
     )
 
@@ -207,11 +197,9 @@ def cmd_start(m):
 def cmd_status(m):
     tu, den = get_pham_vi()
     bot.send_message(m.chat.id,
-        f"📊 **TRẠNG THÁI DỮ LIỆU**\n"
-        f"• Tổng ngày đã lưu: **{len(load_data())} ngày**\n"
-        f"• Phạm vi dữ liệu: **{tu} → {den}**\n"
-        f"• ⏰ Gửi Kết quả D: {SEND_RESULT_TIME}\n"
-        f"• ⏰ Gửi Dự đoán D+1: {SEND_PREDICT_TIME}",
+        f"📊 *TRẠNG THÁI DỮ LIỆU*\n"
+        f"• Tổng ngày: *{len(load_data())} ngày*\n"
+        f"• Phạm vi: *{tu} → {den}*",
         parse_mode="Markdown"
     )
 
@@ -219,15 +207,14 @@ def cmd_status(m):
 def cmd_dudoan(m):
     bot.send_message(m.chat.id, tinh_du_doan(), parse_mode="Markdown")
 
-# ✅ LỆNH CHÍNH — TỰ ĐỘNG LẤY 90 NGÀY, KHÔNG CẦN NHẬP THỦ CÔNG!
 @bot.message_handler(commands=['lay90'])
 def cmd_lay90(m):
-    msg = bot.send_message(m.chat.id, "🚀 TỰ ĐỘNG LẤY 90 NGÀY DỮ LIỆU THẬT...\n⏰ Khoảng 2-3 phút, vui lòng chờ!")
+    msg = bot.send_message(m.chat.id, "🚀 ĐANG LẤY 90 NGÀY DỮ LIỆU...\n⏰ Khoảng 2-3 phút!")
     def lay():
         tong, lay_moi, that_bai = tu_dong_lay_90ngay()
         bot.edit_message_text(
-            f"✅ **HOÀN THÀNH!** 🎉\n"
-            f"📊 Tổng dữ liệu: **{tong} ngày**\n"
+            f"✅ *HOÀN THÀNH!* 🎉\n"
+            f"📊 Tổng dữ liệu: *{tong} ngày*\n"
             f"• Lấy mới: {lay_moi} ngày\n"
             f"• Không lấy được: {that_bai} ngày\n\n"
             f"👉 Gõ /dudoan để xem dự đoán!",
@@ -235,7 +222,7 @@ def cmd_lay90(m):
         )
     Thread(target=lay, daemon=True).start()
 
-# ✅ XEM NGÀY CŨ — TỰ ĐỘNG LẤY TỪ NGUỒN NẾU CHƯA CÓ!
+# Xem ngày cũ
 @bot.message_handler(func=lambda msg: re.fullmatch(r"\d{8}", msg.text.strip()))
 def xem_lich_su(m):
     text = m.text.strip()
@@ -248,32 +235,35 @@ def xem_lich_su(m):
         if date_str in data:
             kq = data[date_str]
             bot.send_message(m.chat.id,
-                f"📅 **KẾT QUẢ NGÀY CŨ: {date_str}**\n"
-                f"🏆 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq.get('source')}",
+                f"📅 *KẾT QUẢ: {date_str}*\n"
+                f"🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq.get('source')}",
                 parse_mode="Markdown"
             )
         else:
-            bot.send_message(m.chat.id, f"🔍 TỰ ĐỘNG LẤY DỮ LIỆU NGÀY {date_str}...")
+            bot.send_message(m.chat.id, f"🔍 ĐANG LẤY DỮ LIỆU NGÀY {date_str}...")
             kq = lay_ket_qua_xsmb(date_str)
             if kq and save_data(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                 bot.send_message(m.chat.id,
-                    f"✅ **ĐÃ LẤY ĐƯỢC!** 🎉\n"
-                    f"📅 Ngày: {date_str}\n"
-                    f"🏆 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq['source']}",
+                    f"✅ *ĐÃ LẤY ĐƯỢC!* 🎉\n"
+                    f"📅 Ngày: {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`",
                     parse_mode="Markdown"
                 )
             else:
-                bot.send_message(m.chat.id,
-                    f"⚠️ Không lấy được dữ liệu ngày {date_str} từ nguồn.\n"
-                    f"👉 Thử lại sau hoặc gõ ngày khác!",
-                    parse_mode="Markdown"
-                )
+                bot.send_message(m.chat.id, f"⚠️ Không lấy được dữ liệu ngày {date_str}")
     except:
         bot.send_message(m.chat.id, "⚠️ Sai định dạng! VD: `29082026`", parse_mode="Markdown")
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
+# ====================== 🚀 KHỞI ĐỘNG — SỬA LỖI POLLING TELEGRAM ======================
+def run_bot():
+    print("✅ BOT V20.0 ĐÃ CHẠY — ĐÃ SỬA LỖI DỮ LIỆU!")
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=25)
+        except Exception as e:
+            print(f"⚠️ Lỗi kết nối Telegram: {e} — thử lại sau 5s...")
+            time.sleep(5)
+
 if __name__ == "__main__":
     Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     Thread(target=gui_tu_dong, daemon=True).start()
-    print("✅ BOT V19.0 ĐÃ CHẠY — HOÀN TOÀN TỰ ĐỘNG! BỎ NHẬP THỦ CÔNG!")
-    bot.infinity_polling()
+    run_bot()
