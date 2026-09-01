@@ -1,7 +1,7 @@
 # ==========================================================
-# BOT XSMB — V24.0 | ✅ DỮ LIỆU THẬT + TỰ LẤY 90 NGÀY + DỰ ĐOÁN
+# BOT XSMB — V25.0 | ✅ SỬA TRIỆT ĐỂ LỖI 409 + DỮ LIỆU THẬT
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
-# Chat ID kênh: -1001030583610
+# Chat ID: -1001030583610
 # ==========================================================
 
 import telebot, json, os, re, time, threading
@@ -21,7 +21,10 @@ SEND_PREDICT_TIME = "18:41"
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
+
+# 🔒 KHÓA TOÀN CỤC — ĐẢM BẢO CHỈ 1 LUỒNG GỌI TELEGRAM API
 BOT_LOCK = threading.Lock()
+POLLING_STARTED = False  # Ngăn khởi động nhiều lần
 
 # ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_data():
@@ -160,15 +163,15 @@ def tinh_du_doan():
 ⚠️ Dữ liệu từ API — Chỉ tham khảo!
 """
 
-# ====================== ⏰ GỬI AN TOÀN — TỰ THỬ LẠI ======================
+# ====================== ⏰ GỬI AN TOÀN — DÙNG KHÓA ======================
 def gui_telegram(chat_id, text, parse_mode="Markdown", max_thu_lai=5):
     for lan in range(1, max_thu_lai + 1):
         try:
-            with BOT_LOCK:
+            with BOT_LOCK:  # 🔒 Chỉ 1 luồng gửi tại 1 thời điểm
                 return bot.send_message(chat_id, text, parse_mode=parse_mode)
         except Exception as e:
             if any(err in str(e) for err in ["502", "429", "409", "Bad Gateway", "Conflict"]):
-                tam_nghi = 2 ** lan
+                tam_nghi = min(2 ** lan, 30)
                 print(f"⚠️ Lỗi Telegram (lần {lan}): {e} → chờ {tam_nghi}s...")
                 time.sleep(tam_nghi)
             else:
@@ -176,7 +179,7 @@ def gui_telegram(chat_id, text, parse_mode="Markdown", max_thu_lai=5):
                 return None
     return None
 
-# ====================== ⏰ TỰ ĐỘNG GỬI ======================
+# ====================== ⏰ TỰ ĐỘNG GỬI — CHẠY RIÊNG LUỒNG ======================
 def gui_tu_dong():
     da_gui_kq, da_gui_dd = set(), set()
     while True:
@@ -201,22 +204,22 @@ def gui_tu_dong():
             
             time.sleep(30)
         except Exception as e:
-            print(f"⚠️ Lỗi vòng lặp: {e}")
+            print(f"⚠️ Lỗi vòng lặp gửi: {e}")
             time.sleep(10)
 
 # ====================== 📋 LỆNH BOT ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V24.0 — ĐÃ SẴN SÀNG!"
+def home(): return "✅ Bot XSMB V25.0 — ĐÃ SỬA LỖI 409!"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     gui_telegram(m.chat.id,
-        "🤖 *BOT XSMB — V24.0 | DỮ LIỆU THẬT TỪ API ✅*\n"
+        "🤖 *BOT XSMB — V25.0 | SỬA LỖI 409 + DỮ LIỆU THẬT ✅*\n"
         "/lay90 = Tự động lấy 90 ngày dữ liệu\n"
         "/dudoan = Xem dự đoán\n"
         "/status = Xem trạng thái dữ liệu\n"
         "Ngày VD: 29082026 → Xem kết quả lịch sử\n\n"
-        "📌 Gõ /lay90 → Bắt đầu lấy dữ liệu thật ngay!",
+        "📌 Gõ /lay90 → Bắt đầu!",
         parse_mode="Markdown"
     )
 
@@ -284,19 +287,49 @@ def xem_lich_su(m):
     except:
         gui_telegram(m.chat.id, "⚠️ Sai định dạng! VD: `29082026`", parse_mode="Markdown")
 
-# ====================== 🚀 KHỞI ĐỘNG ======================
+# ====================== 🚀 KHỞI ĐỘNG — CHỈ 1 LUỒNG POLLING ======================
 def run_bot():
-    print("✅ BOT V24.0 ĐÃ CHẠY — DỮ LIỆU THẬT TỪ API!")
-    try: bot.remove_webhook()
-    except: pass
+    global POLLING_STARTED
+    if POLLING_STARTED:
+        print("⚠️ Polling đã chạy — KHÔNG khởi động lại!")
+        return
+    POLLING_STARTED = True
+    
+    print("✅ BOT V25.0 ĐÃ CHẠY — ĐÃ SỬA TRIỆT ĐỂ LỖI 409!")
+    
+    # 🔒 TẮT WEBHOOK — TRÁNH XUNG ĐỘT
+    try:
+        bot.remove_webhook()
+        print("✅ Đã TẮT Webhook — chỉ dùng Polling!")
+    except Exception as e:
+        print(f"⚠️ Lỗi tắt webhook: {e} — tiếp tục...")
+    
+    # ✅ CHỈ 1 LUỒNG POLLING — KHÔNG DÙNG THAM SỐ GÂY LỖI
     while True:
         try:
-            bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
+            bot.infinity_polling(
+                timeout=30,
+                long_polling_timeout=40,
+                allowed_updates=None
+                # ❌ KHÔNG DÙNG: skip_pending_updates, threaded, none_stop
+            )
         except Exception as e:
-            print(f"⚠️ Lỗi polling: {e} → thử lại sau 5s...")
-            time.sleep(5)
+            if any(err in str(e) for err in ["409", "Conflict", "terminated by other"]):
+                print(f"⚠️ LỖI 409 VẪN XẢY RA → đợi 10s rồi thử lại...")
+                time.sleep(10)
+            else:
+                print(f"⚠️ Lỗi polling: {e} → đợi 5s...")
+                time.sleep(5)
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
+    # Flask chạy nền — KHÔNG dùng threaded=True
+    threading.Thread(
+        target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False),
+        daemon=True
+    ).start()
+    
+    # Gửi tự động — chạy riêng luồng
     threading.Thread(target=gui_tu_dong, daemon=True).start()
+    
+    # ✅ CHỈ 1 LUỒNG POLLING — TRÁNH 409!
     run_bot()
