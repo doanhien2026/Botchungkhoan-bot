@@ -1,5 +1,5 @@
 # ==========================================================
-# BOT XSMB — V20.0 | ✅ SỬA LỖI DỮ LIỆU + LỖI TELEGRAM + TỰ ĐỘNG
+# BOT XSMB — V21.0 | ✅ DÙNG API + LOG RÕ RÀNG + TỰ ĐỘNG
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Chat ID: -1001030583610
 # ==========================================================
@@ -23,7 +23,7 @@ SEND_PREDICT_TIME = "18:41"
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
 
-# ====================== 💾 QUẢN LÝ DỮ LIỆU — SỬA LỖI LƯU ======================
+# ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
@@ -63,9 +63,11 @@ def save_data(date_str, special, g1, loto, source="api"):
         print(f"❌ Lỗi lưu: {e}")
         return False
 
-# ====================== 🆕 TỰ ĐỘNG LẤY 90 NGÀY ======================
+# ====================== 🆕 TỰ ĐỘNG LẤY 90 NGÀY — LOG RÕ RÀNG ======================
 def tu_dong_lay_90ngay():
-    print("🚀 TỰ ĐỘNG LẤY 90 NGÀY DỮ LIỆU...")
+    print("="*50)
+    print("🚀 BẮT ĐẦU LẤY 90 NGÀY DỮ LIỆU TỪ API...")
+    print("="*50)
     today = datetime.now()
     dem_lay_moi = dem_da_co = dem_that_bai = 0
     data = load_data()
@@ -73,21 +75,32 @@ def tu_dong_lay_90ngay():
     for offset in range(1, ANALYSIS_DAYS + 1):
         target_date = today - timedelta(days=offset)
         date_str = target_date.strftime("%d/%m/%Y")
+        
         if date_str in data:
             dem_da_co += 1
+            if dem_da_co % 10 == 0:
+                print(f"⏩ Đã có: {date_str} — bỏ qua")
             continue
         
+        print(f"📥 [{dem_lay_moi+1}/{ANALYSIS_DAYS}] Đang lấy: {date_str}...")
         kq = lay_ket_qua_xsmb(date_str)
+        
         if kq and save_data(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
             dem_lay_moi += 1
-            print(f"✅ [{dem_lay_moi}] {date_str} | ĐB:{kq['special']}")
+            print(f"✅ ✅ THÀNH CÔNG: {date_str} | ĐB:{kq['special']} | {len(kq['loto'])} lô")
         else:
             dem_that_bai += 1
-            print(f"❌ {date_str} | KHÔNG LẤY ĐƯỢC")
-        time.sleep(1)
+            print(f"❌ THẤT BẠI: {date_str} — không lấy được dữ liệu")
+        
+        time.sleep(0.8)  # Tránh bị chặn tốc độ
     
     tong = len(load_data())
-    print(f"✅ HOÀN THÀNH! Tổng: {tong} ngày | Đã có: {dem_da_co} | Lấy mới: {dem_lay_moi} | Thất bại: {dem_that_bai}")
+    print("="*50)
+    print(f"✅ HOÀN THÀNH! TỔNG: {tong} ngày dữ liệu")
+    print(f"• Đã có sẵn: {dem_da_co} ngày")
+    print(f"• Lấy mới thành công: {dem_lay_moi} ngày")
+    print(f"• Thất bại: {dem_that_bai} ngày")
+    print("="*50)
     return tong, dem_lay_moi, dem_that_bai
 
 # ====================== 📊 TÍNH DỰ ĐOÁN ======================
@@ -103,7 +116,7 @@ def tinh_du_doan():
     data = load_data()
     tong = len(data)
     if tong < 30:
-        return f"⚠️ Cần ít nhất 30 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để lấy!"
+        return f"⚠️ Cần ít nhất 30 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để lấy dữ liệu tự động!"
     
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     so_ngay = min(ANALYSIS_DAYS, tong)
@@ -120,7 +133,7 @@ def tinh_du_doan():
             tat_ca_dau.append(db[0])
     
     if not tat_ca_lo:
-        return "⚠️ Dữ liệu lô trống."
+        return "⚠️ Dữ liệu lô trống. Gõ /lay90 để lấy dữ liệu!"
     
     dem_lo = Counter(tat_ca_lo)
     ds_lo = [{"so":s, "lan":c, "ty_le":round(c/so_ngay*100,1)} for s,c in dem_lo.items()]
@@ -135,18 +148,23 @@ def tinh_du_doan():
     
     ngay_mai = (datetime.now()+timedelta(days=1)).strftime("%d/%m/%Y")
     return f"""
-📊 *DỰ ĐOÁN NGÀY MAI: {ngay_mai}*
-📈 Phân tích: {so_ngay} ngày dữ liệu thật
+📊 *DỰ ĐOÁN NGÀY MAI (D+1): {ngay_mai}*
+📈 Phân tích: {so_ngay} ngày dữ liệu THẬT từ API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎯 *3 CON LÔ TỶ LỆ CAO NHẤT:*
-   1 • `{top3[0]['so']}` → {top3[0]['lan']} lần | {top3[0]['ty_le']}%
-   2 • `{top3[1]['so']}` → {top3[1]['lan']} lần | {top3[1]['ty_le']}%
-   3 • `{top3[2]['so']}` → {top3[2]['lan']} lần | {top3[2]['ty_le']}%
+   1 • `{top3[0]['so']}` → {top3[0]['lan']} lần | Tỷ lệ: {top3[0]['ty_le']}%
+   2 • `{top3[1]['so']}` → {top3[1]['lan']} lần | Tỷ lệ: {top3[1]['ty_le']}%
+   3 • `{top3[2]['so']}` → {top3[2]['lan']} lần | Tỷ lệ: {top3[2]['ty_le']}%
 
-🔀 *XIÊN:* `{xien[0]}` + `{xien[1]}`
-🔢 *ĐẦU ĐỀ:* `{dau_de}` | {ty_le_dau}%
+🔀 *CẶP LÔ XIÊN:*
+   → `{xien[0]}` + `{xien[1]}`
 
-⚠️ Chỉ tham khảo!
+🔢 *ĐẦU SỐ ĐỀ DỰ KIẾN:*
+   → `{dau_de}` | Tỷ lệ: {ty_le_dau}%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ Dữ liệu từ API — Chỉ tham khảo!
 """
 
 # ====================== ⏰ TỰ ĐỘNG GỬI ======================
@@ -162,8 +180,8 @@ def gui_tu_dong():
                 kq = lay_ket_qua_xsmb(hom_nay)
                 if kq and save_data(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                     bot.send_message(CHAT_ID,
-                        f"🏆 *KẾT QUẢ NGÀY: {hom_nay}*\n"
-                        f"🎯 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
+                        f"🏆 *KẾT QUẢ NGÀY D — {hom_nay}*\n"
+                        f"🎯 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq['source']}",
                         parse_mode="Markdown"
                     )
                 da_gui_kq.add(hom_nay)
@@ -179,17 +197,17 @@ def gui_tu_dong():
 
 # ====================== 📋 LỆNH BOT ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V20.0 | ĐÃ SỬA LỖI DỮ LIỆU!"
+def home(): return "✅ Bot XSMB V21.0 | DÙNG API — CHẮC CHẮN!"
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
     bot.send_message(m.chat.id,
-        "🤖 *BOT XSMB — V20.0 | SỬA LỖI DỮ LIỆU ✅*\n"
-        "/lay90 = Tự động lấy 90 ngày dữ liệu thật\n"
+        "🤖 *BOT XSMB — V21.0 | DÙNG API ✅ KHÔNG BỊ CHẶN!*\n"
+        "/lay90 = Tự động lấy 90 ngày dữ liệu từ API\n"
         "/dudoan = Xem dự đoán\n"
         "/status = Xem trạng thái dữ liệu\n"
-        "Ngày VD: 29082026 → Xem kết quả\n\n"
-        "📌 Gõ /lay90 → bắt đầu!",
+        "Ngày VD: 29082026 → Xem kết quả đã lưu\n\n"
+        "📌 Gõ /lay90 → Bắt đầu lấy dữ liệu thật ngay! ⭐",
         parse_mode="Markdown"
     )
 
@@ -198,8 +216,8 @@ def cmd_status(m):
     tu, den = get_pham_vi()
     bot.send_message(m.chat.id,
         f"📊 *TRẠNG THÁI DỮ LIỆU*\n"
-        f"• Tổng ngày: *{len(load_data())} ngày*\n"
-        f"• Phạm vi: *{tu} → {den}*",
+        f"• Tổng ngày đã lưu: *{len(load_data())} ngày*\n"
+        f"• Phạm vi dữ liệu: *{tu} → {den}*",
         parse_mode="Markdown"
     )
 
@@ -209,13 +227,18 @@ def cmd_dudoan(m):
 
 @bot.message_handler(commands=['lay90'])
 def cmd_lay90(m):
-    msg = bot.send_message(m.chat.id, "🚀 ĐANG LẤY 90 NGÀY DỮ LIỆU...\n⏰ Khoảng 2-3 phút!")
+    msg = bot.send_message(m.chat.id, 
+        "🚀 *ĐANG LẤY 90 NGÀY DỮ LIỆU TỪ API...*\n"
+        "⏰ Khoảng 2-3 phút, vui lòng chờ!\n"
+        "📌 Kiểm tra Log trên Render để xem tiến độ...",
+        parse_mode="Markdown"
+    )
     def lay():
         tong, lay_moi, that_bai = tu_dong_lay_90ngay()
         bot.edit_message_text(
-            f"✅ *HOÀN THÀNH!* 🎉\n"
+            f"✅ *HOÀN THÀNH LẤY DỮ LIỆU!* 🎉\n"
             f"📊 Tổng dữ liệu: *{tong} ngày*\n"
-            f"• Lấy mới: {lay_moi} ngày\n"
+            f"• Lấy mới thành công: {lay_moi} ngày\n"
             f"• Không lấy được: {that_bai} ngày\n\n"
             f"👉 Gõ /dudoan để xem dự đoán!",
             m.chat.id, msg.message_id, parse_mode="Markdown"
@@ -235,27 +258,32 @@ def xem_lich_su(m):
         if date_str in data:
             kq = data[date_str]
             bot.send_message(m.chat.id,
-                f"📅 *KẾT QUẢ: {date_str}*\n"
-                f"🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq.get('source')}",
+                f"📅 *KẾT QUẢ NGÀY CŨ: {date_str}*\n"
+                f"🏆 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq.get('source')}",
                 parse_mode="Markdown"
             )
         else:
-            bot.send_message(m.chat.id, f"🔍 ĐANG LẤY DỮ LIỆU NGÀY {date_str}...")
+            bot.send_message(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str} TỪ API...*", parse_mode="Markdown")
             kq = lay_ket_qua_xsmb(date_str)
             if kq and save_data(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                 bot.send_message(m.chat.id,
-                    f"✅ *ĐÃ LẤY ĐƯỢC!* 🎉\n"
-                    f"📅 Ngày: {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`",
+                    f"✅ *ĐÃ LẤY ĐƯỢC DỮ LIỆU THẬT!* 🎉\n"
+                    f"📅 Ngày: {date_str}\n"
+                    f"🏆 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n🎟️ Số lô: {len(kq['loto'])} con\n📌 Nguồn: {kq['source']}",
                     parse_mode="Markdown"
                 )
             else:
-                bot.send_message(m.chat.id, f"⚠️ Không lấy được dữ liệu ngày {date_str}")
+                bot.send_message(m.chat.id,
+                    f"⚠️ *Không lấy được dữ liệu ngày {date_str} từ API.*\n"
+                    f"👉 Thử lại sau hoặc gõ ngày khác!",
+                    parse_mode="Markdown"
+                )
     except:
         bot.send_message(m.chat.id, "⚠️ Sai định dạng! VD: `29082026`", parse_mode="Markdown")
 
-# ====================== 🚀 KHỞI ĐỘNG — SỬA LỖI POLLING TELEGRAM ======================
+# ====================== 🚀 KHỞI ĐỘNG ======================
 def run_bot():
-    print("✅ BOT V20.0 ĐÃ CHẠY — ĐÃ SỬA LỖI DỮ LIỆU!")
+    print("✅ BOT V21.0 ĐÃ CHẠY — DÙNG API MIỄN PHÍ! KHÔNG BỊ CHẶN!")
     while True:
         try:
             bot.infinity_polling(timeout=20, long_polling_timeout=25)
