@@ -1,6 +1,5 @@
 # ==========================================================
-# xsmb_bot2.py — V28.0 | TOÀN BỘ TRONG 1 FILE
-# ✅ Không cần file khác | ✅ Lấy dữ liệu thật 2 nguồn | ✅ Dự đoán 90 ngày
+# xsmb_bot2.py — V29.0 | ✅ SỬA TRIỆT ĐỂ LỖI 409 | CHỈ 1 FILE
 # Token: 8933441659:AAHbDy-fkWjdplemKGc-81gWJAq8eXRpu0w
 # Chat ID: -1001030583610
 # ==========================================================
@@ -22,6 +21,10 @@ SEND_PREDICT_TIME = "18:41"
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+# 🔒 KHÓA TOÀN CỤC — ĐẢM BẢO CHỈ 1 LUỒNG GỌI TELEGRAM API
+BOT_LOCK = threading.Lock()
+POLLING_STARTED = False
 
 # ====================== 💾 QUẢN LÝ DỮ LIỆU ======================
 def load_data():
@@ -152,12 +155,28 @@ def tinh_du_doan():
 
 # ====================== 🤖 LỆNH BOT ======================
 @app.route('/')
-def home(): return "✅ Bot XSMB V28.0 — Chạy từ xsmb_bot2.py!"
+def home(): return "✅ Bot XSMB V29.0 — ĐÃ SỬA LỖI 409!"
+
+# ✅ HÀM GỬI AN TOÀN — DÙNG KHÓA
+def gui_anh_ten(chat_id, text, parse_mode="Markdown", max_thu_lai=3):
+    for lan in range(1, max_thu_lai + 1):
+        try:
+            with BOT_LOCK:
+                return bot.send_message(chat_id, text, parse_mode=parse_mode)
+        except Exception as e:
+            if any(err in str(e) for err in ["409", "Conflict", "429"]):
+                tam_nghi = min(2 ** lan, 15)
+                print(f"⚠️ Lỗi Telegram (lần {lan}): {e} → chờ {tam_nghi}s...")
+                time.sleep(tam_nghi)
+            else:
+                print(f"❌ Lỗi gửi: {e}")
+                return None
+    return None
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
-    bot.send_message(m.chat.id,
-        "🤖 *BOT XSMB — V28.0 | TOÀN BỘ TRONG 1 FILE ✅*\n"
+    gui_anh_ten(m.chat.id,
+        "🤖 *BOT XSMB — V29.0 | ĐÃ SỬA LỖI 409 ✅*\n"
         "/lay90 = Lấy 90 ngày dữ liệu thật\n"
         "/dudoan = Xem dự đoán\n"
         "/status = Xem trạng thái dữ liệu\n"
@@ -169,14 +188,14 @@ def cmd_start(m):
 @bot.message_handler(commands=['status'])
 def cmd_status(m):
     tong, tu, den = get_stats()
-    bot.send_message(m.chat.id,
+    gui_anh_ten(m.chat.id,
         f"📊 *TRẠNG THÁI DỮ LIỆU*\n• Tổng ngày: *{tong} ngày*\n• Phạm vi: {tu} → {den}",
         parse_mode="Markdown"
     )
 
 @bot.message_handler(commands=['lay90'])
 def cmd_lay90(m):
-    bot.send_message(m.chat.id, "🚀 *ĐANG LẤY 90 NGÀY DỮ LIỆU...*\n⏰ 2-3 phút nhé!", parse_mode="Markdown")
+    gui_anh_ten(m.chat.id, "🚀 *ĐANG LẤY 90 NGÀY DỮ LIỆU...*\n⏰ 2-3 phút nhé!", parse_mode="Markdown")
     def lay_async():
         today = datetime.now()
         lay_moi = that_bai = 0
@@ -191,7 +210,7 @@ def cmd_lay90(m):
                 that_bai += 1
             time.sleep(0.8)
         tong, _, _ = get_stats()
-        bot.send_message(m.chat.id,
+        gui_anh_ten(m.chat.id,
             f"✅ *HOÀN THÀNH!* 🎉\n📊 Tổng: *{tong} ngày*\n• Lấy mới: {lay_moi}\n• Thất bại: {that_bai}\n👉 Gõ /dudoan!",
             parse_mode="Markdown"
         )
@@ -199,7 +218,7 @@ def cmd_lay90(m):
 
 @bot.message_handler(commands=['dudoan'])
 def cmd_dudoan(m):
-    bot.send_message(m.chat.id, tinh_du_doan(), parse_mode="Markdown")
+    gui_anh_ten(m.chat.id, tinh_du_doan(), parse_mode="Markdown")
 
 # Xem ngày cũ
 @bot.message_handler(func=lambda msg: msg.text and len(msg.text.strip())==8 and msg.text.strip().isdigit())
@@ -211,22 +230,22 @@ def xem_ngay_cu(m):
         data = load_data()
         if date_str in data:
             kq = data[date_str]
-            bot.send_message(m.chat.id,
+            gui_anh_ten(m.chat.id,
                 f"📅 *KẾT QUẢ NGÀY: {date_str}*\n🏆 Đặc Biệt: `{kq['special']}`\n🥇 Giải Nhất: `{kq['g1']}`\n📌 Nguồn: {kq.get('source')}",
                 parse_mode="Markdown"
             )
         else:
-            bot.send_message(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str}...*", parse_mode="Markdown")
+            gui_anh_ten(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str}...*", parse_mode="Markdown")
             kq = lay_ket_qua_xsmb(date_str)
             if kq and save_data(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
-                bot.send_message(m.chat.id,
+                gui_anh_ten(m.chat.id,
                     f"✅ *ĐÃ LẤY ĐƯỢC!* 🎉\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`",
                     parse_mode="Markdown"
                 )
             else:
-                bot.send_message(m.chat.id, f"⚠️ *Không lấy được dữ liệu ngày {date_str}*", parse_mode="Markdown")
+                gui_anh_ten(m.chat.id, f"⚠️ *Không lấy được dữ liệu ngày {date_str}*", parse_mode="Markdown")
     except:
-        bot.send_message(m.chat.id, "⚠️ Sai định dạng! VD: `29082026`", parse_mode="Markdown")
+        gui_anh_ten(m.chat.id, "⚠️ Sai định dạng! VD: `29082026`", parse_mode="Markdown")
 
 # ====================== ⏰ TỰ ĐỘNG GỬI ======================
 def gui_tu_dong():
@@ -239,32 +258,62 @@ def gui_tu_dong():
             if gio == SEND_RESULT_TIME and hom_nay not in da_gui_kq:
                 kq = lay_ket_qua_xsmb(hom_nay)
                 if kq and save_data(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"]):
-                    bot.send_message(CHAT_ID,
+                    gui_anh_ten(CHAT_ID,
                         f"🏆 *KẾT QUẢ NGÀY D — {hom_nay}*\n🎯 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
                         parse_mode="Markdown"
                     )
                 da_gui_kq.add(hom_nay)
             if gio == SEND_PREDICT_TIME and hom_nay not in da_gui_dd:
-                bot.send_message(CHAT_ID, tinh_du_doan(), parse_mode="Markdown")
+                gui_anh_ten(CHAT_ID, tinh_du_doan(), parse_mode="Markdown")
                 da_gui_dd.add(hom_nay)
             time.sleep(30)
         except Exception as e:
             print(f"⚠️ Lỗi tự động gửi: {e}")
             time.sleep(10)
 
-# ====================== 🚀 CHẠY BOT ======================
+# ====================== 🚀 CHẠY BOT — CHỈ 1 LUỒNG ======================
 def run_bot():
-    print("✅ BOT V28.0 — CHẠY TỪ xsmb_bot2.py | TOÀN BỘ TRONG 1 FILE!")
-    try: bot.remove_webhook()
-    except: pass
+    global POLLING_STARTED
+    if POLLING_STARTED:
+        print("⚠️ Polling đã chạy — KHÔNG khởi động lại!")
+        return
+    POLLING_STARTED = True
+    
+    print("✅ BOT V29.0 — ĐÃ SỬA LỖI 409! CHỈ 1 INSTANCE!")
+    
+    # 🔒 TẮT WEBHOOK — TRÁNH XUNG ĐỘT
+    try:
+        bot.remove_webhook()
+        print("✅ Đã TẮT Webhook!")
+    except Exception as e:
+        print(f"⚠️ Lỗi tắt webhook: {e} — tiếp tục...")
+    
+    # ✅ CHỈ 1 LUỒNG POLLING — KHÔNG DÙNG threaded, skip_pending_updates
     while True:
         try:
-            bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
+            bot.infinity_polling(
+                timeout=30,
+                long_polling_timeout=40,
+                allowed_updates=None
+                # ❌ Bỏ hoàn toàn: threaded, skip_pending_updates, none_stop
+            )
         except Exception as e:
-            print(f"⚠️ Lỗi polling: {e} → đợi 5s...")
-            time.sleep(5)
+            if "409" in str(e) or "Conflict" in str(e):
+                print("🔴 LỖI 409 VẪN XẢY RA → đợi 15s rồi thử lại...")
+                time.sleep(15)
+            else:
+                print(f"⚠️ Lỗi polling: {e} → đợi 5s...")
+                time.sleep(5)
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False), daemon=True).start()
+    # Flask chạy nền — KHÔNG dùng threaded=True
+    threading.Thread(
+        target=lambda: app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False),
+        daemon=True
+    ).start()
+    
+    # Gửi tự động — chạy riêng luồng
     threading.Thread(target=gui_tu_dong, daemon=True).start()
+    
+    # ✅ CHỈ 1 LUỒNG POLLING — TRÁNH 409!
     run_bot()
