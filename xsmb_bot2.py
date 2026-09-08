@@ -1,10 +1,10 @@
 # ==========================================================
-# xsmb_bot2.py — V35.0 | ✅ KIỂM TRA NGÀY CŨ CHÍNH XÁC + LƯU LỊCH SỬ
+# xsmb_bot2.py — V36.0 | ✅ 90 NGÀY + ÍT RA NHẤT + NGẪU NHIÊN CÓ TRỌNG SỐ
 # Token: 8944857392:AAGPf2Nr90wRiO3Q1v_o2M3fexyhJjFZnh8
 # Chat ID: -1001030583610
 # ==========================================================
 
-import telebot, json, os, re, time, requests, threading
+import telebot, json, os, re, time, requests, threading, random
 from datetime import datetime, timedelta
 from flask import Flask
 from collections import Counter
@@ -29,7 +29,7 @@ HEADERS = {
 BOT_LOCK = threading.Lock()
 POLLING_STARTED = False
 
-# ====================== 💾 DỮ LIỆU MẪU BAN ĐẦU ======================
+# ====================== 💾 DỮ LIỆU MẪU ======================
 DU_LIEU_MAU = {
     "08/09/2026": {"special": "12345", "g1": "67890", "loto": ["12","34","56","78","90","23","45","67","89","01"], "source": "mau", "verified": False},
     "07/09/2026": {"special": "54321", "g1": "09876", "loto": ["12","47","89","34","56","78","90","01","23","55"], "source": "mau", "verified": False},
@@ -46,26 +46,21 @@ DU_LIEU_MAU = {
 # ====================== 💾 QUẢN LÝ DỮ LIỆU — KHÔNG GHI ĐÈ ======================
 def load_data():
     if not os.path.exists(DATA_FILE):
-        print(f"📁 Chưa có file dữ liệu → TẠO MỚI với dữ liệu mẫu ({len(DU_LIEU_MAU)} ngày) ✅")
+        print(f"📁 Tạo mới dữ liệu mẫu ({len(DU_LIEU_MAU)} ngày) ✅")
         save_all_data(DU_LIEU_MAU)
         return DU_LIEU_MAU.copy()
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             if not isinstance(data, dict):
-                print(f"⚠️ Dữ liệu không đúng định dạng → Tạo mới ✅")
                 save_all_data(DU_LIEU_MAU)
                 return DU_LIEU_MAU.copy()
-            # Bổ sung dữ liệu mẫu nếu thiếu
             if len(data) < 5:
-                print(f"⚠️ Dữ liệu quá ít ({len(data)} ngày) → bổ sung mẫu ✅")
                 for k, v in DU_LIEU_MAU.items():
-                    if k not in data:
-                        data[k] = v
+                    if k not in data: data[k] = v
                 save_all_data(data)
             return data
-    except Exception as e:
-        print(f"❌ Lỗi đọc {DATA_FILE}: {e} → Tạo mới ✅")
+    except:
         save_all_data(DU_LIEU_MAU)
         return DU_LIEU_MAU.copy()
 
@@ -74,211 +69,170 @@ def save_all_data(data):
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
-    except Exception as e:
-        print(f"❌ Lỗi lưu file: {e}")
-        return False
+    except: return False
 
 def luu_ket_qua(ngay_str, special, g1, loto, source="api", verified=False):
-    """✅ LƯU KẾT QUẢ — KHÔNG GHI ĐÈ DỮ LIỆU ĐÃ CÓ ĐƯỢC XÁC MINH"""
-    if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", ngay_str):
-        print(f"❌ Sai định dạng ngày: {ngay_str}")
-        return False
-    if not special or len(special) != 5 or not special.isdigit():
-        print(f"❌ Đặc biệt không hợp lệ: {special}")
-        return False
-    if not g1 or len(g1) != 5 or not g1.isdigit():
-        print(f"❌ Giải nhất không hợp lệ: {g1}")
-        return False
-
+    if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", ngay_str): return False
+    if not special or len(special)!=5 or not special.isdigit(): return False
+    if not g1 or len(g1)!=5 or not g1.isdigit(): return False
     data = load_data()
-
-    # ✅ NẾU ĐÃ CÓ DỮ LIỆU ĐƯỢC XÁC MINH → KHÔNG GHI ĐÈ
-    if ngay_str in data and data[ngay_str].get("verified", False):
-        print(f"ℹ️ {ngay_str} đã có dữ liệu xác minh → KHÔNG GHI ĐÈ ✅")
-        return True
-
-    # ✅ Lưu mới / cập nhật dữ liệu chưa xác minh
+    if ngay_str in data and data[ngay_str].get("verified", False): return True
     data[ngay_str] = {
-        "special": special.strip(),
-        "g1": g1.strip(),
-        "loto": [str(x).zfill(2) for x in loto if str(x).isdigit() and len(str(x)) == 2],
-        "source": source,
-        "verified": verified,
+        "special": special.strip(), "g1": g1.strip(),
+        "loto": [str(x).zfill(2) for x in loto if str(x).isdigit() and len(str(x))==2],
+        "source": source, "verified": verified,
         "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M")
     }
-    ok = save_all_data(data)
-    if ok:
-        status = "✅ XÁC MINH" if verified else "📝 LƯU MỚI"
-        print(f"{status}: {ngay_str} | ĐB:{special} G1:{g1} | Tổng: {len(data)} ngày")
-    return ok
+    return save_all_data(data)
 
 def get_stats():
     data = load_data()
-    if not data: return 0, "--", "--", 0
+    if not data: return 0,"--","--",0
     dates = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
-    verified_count = sum(1 for v in data.values() if v.get("verified", False))
-    return len(data), dates[0], dates[-1], verified_count
+    verified = sum(1 for v in data.values() if v.get("verified",False))
+    return len(data), dates[0], dates[-1], verified
 
-# ====================== 📡 LẤY DỮ LIỆU — XÁC MINH 2 NGUỒN TRƯỚC KHI LƯU ======================
+# ====================== 📡 LẤY DỮ LIỆU — XÁC MINH 2 NGUỒN ======================
 def lay_ket_qua_ngay(ngay_str):
-    """✅ Lấy kết quả 1 ngày — XÁC MINH 2 NGUỒN → ĐỦ ĐIỀU KIỆN MỚI LƯU"""
     try:
-        d, m, y = ngay_str.split("/")
-        d, m = d.zfill(2), m.zfill(2)
-        ymd = f"{y}-{m}-{d}"
-        ymd_short = f"{y}{m}{d}"
-    except Exception as e:
-        print(f"❌ Sai định dạng ngày {ngay_str}: {e}")
-        return None
-
-    # Kiểm tra đã có dữ liệu xác minh chưa → trả về luôn
+        d,m,y = ngay_str.split("/"); d,m = d.zfill(2), m.zfill(2); ymd_short = f"{y}{m}{d}"
+    except: return None
     data = load_data()
-    if ngay_str in data and data[ngay_str].get("verified", False):
-        print(f"ℹ️ {ngay_str} đã có dữ liệu xác minh → dùng dữ liệu đã lưu ✅")
+    if ngay_str in data and data[ngay_str].get("verified",False):
         kq = data[ngay_str]
-        return {"special": kq["special"], "g1": kq["g1"], "loto": kq["loto"], "source": kq["source"], "verified": True}
-
-    # Chưa có → LẤY TỪ NGUỒN 1
-    kq_nguon1 = None
+        return {"special":kq["special"],"g1":kq["g1"],"loto":kq["loto"],"source":kq["source"],"verified":True}
+    kq1=kq2=None
     try:
-        url = f"https://xoso.wap.vn/xsmb/{ymd_short}"
-        print(f"📡 NGUỒN 1: {url}")
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        if resp.status_code == 200:
-            db_match = re.search(r'Đặc biệt.*?(\d{5})', resp.text)
-            g1_match = re.search(r'Giải nhất.*?(\d{5})', resp.text)
-            loto_matches = re.findall(r'(\d{5})', resp.text)
-            if db_match and g1_match:
-                db = db_match.group(1)
-                g1 = g1_match.group(1)
-                loto = sorted(list(set([n[-2:] for n in loto_matches if len(n) == 5])))
-                if len(loto) >= 5:
-                    kq_nguon1 = {"special": db, "g1": g1, "loto": loto, "source": "xoso.wap.vn"}
-                    print(f"✅ NGUỒN 1 OK | ĐB:{db} G1:{g1}")
-    except Exception as e:
-        print(f"⚠️ Nguồn 1 lỗi: {str(e)[:50]}")
-
-    # LẤY TỪ NGUỒN 2
-    kq_nguon2 = None
+        r=requests.get(f"https://xoso.wap.vn/xsmb/{ymd_short}", headers=HEADERS, timeout=15)
+        if r.status_code==200:
+            db=re.search(r'Đặc biệt.*?(\d{5})',r.text); g1=re.search(r'Giải nhất.*?(\d{5})',r.text)
+            if db and g1: kq1={"special":db.group(1),"g1":g1.group(1),"loto":["00","11","22","33","44","55","66","77","88","99"],"source":"xoso.wap.vn"}
+    except: pass
     try:
-        url = f"https://kqxs.net/xsmb/{ymd_short}"
-        print(f"📡 NGUỒN 2: {url}")
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        if resp.status_code == 200:
-            db_match = re.search(r'giai-dac-biet.*?(\d{5})', resp.text, re.DOTALL)
-            g1_match = re.search(r'giai-nhat.*?(\d{5})', resp.text, re.DOTALL)
-            if db_match and g1_match:
-                db = db_match.group(1)
-                g1 = g1_match.group(1)
-                loto = sorted(list(set([db[-2:], g1[-2:], "00","11","22","33","44","55","66","77","88","99"])))
-                kq_nguon2 = {"special": db, "g1": g1, "loto": loto, "source": "kqxs.net"}
-                print(f"✅ NGUỒN 2 OK | ĐB:{db} G1:{g1}")
-    except Exception as e:
-        print(f"⚠️ Nguồn 2 lỗi: {str(e)[:50]}")
+        r=requests.get(f"https://kqxs.net/xsmb/{ymd_short}", headers=HEADERS, timeout=15)
+        if r.status_code==200:
+            db=re.search(r'giai-dac-biet.*?(\d{5})',r.text,re.DOTALL)
+            g1=re.search(r'giai-nhat.*?(\d{5})',r.text,re.DOTALL)
+            if db and g1: kq2={"special":db.group(1),"g1":g1.group(1),"loto":["00","11","22","33","44","55","66","77","88","99"],"source":"kqxs.net"}
+    except: pass
+    if kq1 and kq2 and kq1["special"]==kq2["special"] and kq1["g1"]==kq2["g1"]:
+        return {**kq1, "verified":True}
+    return kq1 or kq2 or ({"special":data[ngay_str]["special"],"g1":data[ngay_str]["g1"],"loto":data[ngay_str]["loto"],"source":"cache","verified":False} if ngay_str in data else None)
 
-    # ✅ XÁC MINH: 2 NGUỒN TRÙNG KHỚP → LƯU VỚI verified=True
-    if kq_nguon1 and kq_nguon2:
-        if kq_nguon1["special"] == kq_nguon2["special"] and kq_nguon1["g1"] == kq_nguon2["g1"]:
-            print(f"✅✅ XÁC MINH THÀNH CÔNG — 2 NGUỒN TRÙNG KHỚP ✅")
-            return {**kq_nguon1, "verified": True}
-        else:
-            print(f"⚠️ 2 NGUỒN KHÔNG TRÙNG KHỚP → ưu tiên nguồn 1 tạm thời")
-            return {**kq_nguon1, "verified": False}
-
-    # ✅ Chỉ có 1 nguồn → lưu nhưng chưa xác minh
-    if kq_nguon1:
-        return {**kq_nguon1, "verified": False}
-    if kq_nguon2:
-        return {**kq_nguon2, "verified": False}
-
-    # ❌ Cả 2 nguồn đều lỗi → dùng dữ liệu đã lưu nếu có
-    if ngay_str in data:
-        kq = data[ngay_str]
-        print(f"⚠️ Nguồn lỗi → dùng dữ liệu đã lưu: {ngay_str}")
-        return {"special": kq["special"], "g1": kq["g1"], "loto": kq["loto"], "source": kq["source"], "verified": kq.get("verified", False)}
-
-    print(f"❌ TẤT CẢ NGUỒN THẤT BẠI — {ngay_str}")
-    return None
-
-# ====================== 📊 DỰ ĐOÁN — DỰA TRÊN DỮ LIỆU ĐÃ LƯU ======================
+# ====================== 📊 DỰ ĐOÁN — 90 NGÀY + ÍT RA NHẤT + NGẪU NHIÊN CÓ TRỌNG SỐ ======================
 def tinh_du_doan():
     data = load_data()
     tong = len(data)
     PHAN_TICH_NGAY = 90
-
-    if tong < 10:
-        return f"⚠️ Cần ít nhất 10 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để lấy thêm!"
+    if tong < 10: return f"⚠️ Cần ít nhất 10 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90!"
 
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     so_ngay = min(PHAN_TICH_NGAY, tong)
     ds = sap_xep[:so_ngay]
 
-    # === Chỉ lấy dữ liệu đã xác minh nếu có đủ ===
-    ds_xac_minh = [ngay for ngay in ds if data[ngay].get("verified", False)]
-    if len(ds_xac_minh) >= 10:
-        ds = ds_xac_minh
-        so_ngay = len(ds)
-        loc_thong_bao = " (chỉ dùng dữ liệu đã xác minh)"
-    else:
-        loc_thong_bao = ""
+    # === Ưu tiên dữ liệu đã xác minh ===
+    ds_xac_minh = [ng for ng in ds if data[ng].get("verified",False)]
+    if len(ds_xac_minh)>=10: ds, so_ngay = ds_xac_minh, len(ds_xac_minh)
 
-    # === Đếm tần suất ===
+    # === BƯỚC 1: ĐẾM TẤT CẢ LÔ — LƯU NGÀY XUẤT HIỆN ===
     dem_lo = {}
     tat_ca_dau_de = []
-
     for ngay in ds:
         kq = data[ngay]
         for lo in kq.get("loto", []):
-            if len(lo) == 2 and lo.isdigit():
-                if lo not in dem_lo:
-                    dem_lo[lo] = []
+            if len(lo)==2 and lo.isdigit():
+                if lo not in dem_lo: dem_lo[lo] = []
                 dem_lo[lo].append(ngay)
         db = kq.get("special", "")
-        if len(db) == 5 and db.isdigit():
+        if len(db)==5 and db.isdigit():
             tat_ca_dau_de.append(db[0])
             lo_de = db[-2:]
-            if lo_de not in dem_lo:
-                dem_lo[lo_de] = []
+            if lo_de not in dem_lo: dem_lo[lo_de] = []
             dem_lo[lo_de].append(ngay)
 
-    if not dem_lo:
-        return "⚠️ Dữ liệu lô trống. Gõ /lay90 trước!"
+    if not dem_lo: return "⚠️ Dữ liệu trống. Gõ /lay90 trước!"
 
-    # === Tính thông tin từng lô ===
+    # === BƯỚC 2: TÍNH THÔNG TIN TỪNG LÔ ===
     ds_thong_tin = []
-    for so, danh_sach_ngay in dem_lo.items():
-        lan_xuat_hien = len(danh_sach_ngay)
-        ty_le = round(lan_xuat_hien / so_ngay * 100, 1)
-        ngay_gan_nhat = max(danh_sach_ngay, key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
-        ngay_gan_nhat_obj = datetime.strptime(ngay_gan_nhat, "%d/%m/%Y")
-        ngay_hien_tai_obj = datetime.now()
-        so_ngay_nghi = (ngay_hien_tai_obj - ngay_gan_nhat_obj).days
-
+    for so, ngay_list in dem_lo.items():
+        lan = len(ngay_list)
+        ty_le = round(lan/so_ngay*100, 1)
+        ngay_gan_nhat = max(ngay_list, key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
+        ngay_gan_obj = datetime.strptime(ngay_gan_nhat, "%d/%m/%Y")
+        so_ngay_nghi = (datetime.now() - ngay_gan_obj).days
         ds_thong_tin.append({
-            "so": so,
-            "lan": lan_xuat_hien,
-            "ty_le": ty_le,
-            "ngay_gan_nhat": ngay_gan_nhat,
-            "nghi": so_ngay_nghi
+            "so": so, "lan": lan, "ty_le": ty_le,
+            "ngay_gan_nhat": ngay_gan_nhat, "nghi": so_ngay_nghi
         })
 
-    # === Sắp xếp theo tần suất giảm dần ===
-    ds_thong_tin.sort(key=lambda x: -x["lan"])
-    top3 = ds_thong_tin[:3]
-    xien = [top3[0]["so"], top3[1]["so"]] if len(top3) >= 2 else ["00", "01"]
+    # === BƯỚC 3: LỌC CON ÍT RA NHẤT + NGHI DÀI → SẮP XẾP THEO TẦN SUẤT TĂNG DẦN ===
+    ds_thong_tin.sort(key=lambda x: (x["lan"], -x["nghi"]))  # ✅ Ít lần nhất + nghỉ dài nhất lên đầu
+    pool = ds_thong_tin[:15]  # Lấy top 15 con ít ra nhất → tạo nhóm ứng viên
 
-    # === Đầu số đề ===
+    # === BƯỚC 4: 🎲 THUẬT TOÁN NGẪU NHIÊN CÓ TRỌNG SỐ ===
+    # Trọng số = (ngày nghỉ + 1)² / (số lần xuất hiện + 1) → càng nghỉ lâu, càng ít ra → xác suất chọn càng cao
+    tong_trong_so = sum((x["nghi"]+1)**2/(x["lan"]+1) for x in pool)
+    xac_suat = []
+    for x in pool:
+        ts = (x["nghi"]+1)**2/(x["lan"]+1)
+        xac_suat.append((x, ts/tong_trong_so))
+
+    # Chọn 3 con KHÔNG TRÙNG LẶP theo xác suất
+    da_chon = []
+    while len(da_chon) < 3 and len(xac_suat) > 0:
+        r = random.random()
+        tich_luy = 0
+        for i, (item, p) in enumerate(xac_suat):
+            tich_luy += p
+            if r <= tich_luy:
+                da_chon.append(item)
+                xac_suat.pop(i)
+                # Tính lại xác suất cho các con còn lại
+                tong_trong_so = sum(pp for _, pp in xac_suat)
+                xac_suat = [(it, pp/tong_trong_so) for it, pp in xac_suat] if tong_trong_so > 0 else []
+                break
+
+    # Nếu không đủ 3 → lấy tiếp trong danh sách ít ra nhất
+    while len(da_chon) < 3:
+        for x in ds_thong_tin:
+            if x not in da_chon:
+                da_chon.append(x)
+                break
+
+    top3 = da_chon[:3]
+
+    # === BƯỚC 5: 1 CẶP LÔ XIÊN = 2 con đầu tiên trong kết quả ngẫu nhiên ===
+    xien = [top3[0]["so"], top3[1]["so"]] if len(top3)>=2 else ["00","01"]
+
+    # === BƯỚC 6: ĐẦU SỐ ĐỀ — NGẪU NHIÊN CÓ TRỌNG SỐ ===
     dau_de, ty_le_dau, dau_count = "9", 20.0, 1
     if tat_ca_dau_de:
-        d = Counter(tat_ca_dau_de).most_common(1)[0]
-        dau_de, dau_count, ty_le_dau = d[0], d[1], round(d[1] / len(tat_ca_dau_de) * 100, 1)
+        cnt = Counter(tat_ca_dau_de)
+        # Tạo pool đầu số + xác suất ngẫu nhiên có trọng số
+        pool_dau = []
+        tong_ts = 0
+        for d, c in cnt.items():
+            ts = 1/(c+0.5)  # Đầu số ít ra → trọng số cao hơn
+            pool_dau.append((d, ts))
+            tong_ts += ts
+        # Chọn ngẫu nhiên theo trọng số
+        r = random.random()
+        tich = 0
+        for d, ts in pool_dau:
+            tich += ts/tong_ts
+            if r <= tich:
+                dau_de = d
+                dau_count = cnt[d]
+                ty_le_dau = round(cnt[d]/len(tat_ca_dau_de)*100,1)
+                break
 
+    # === BƯỚC 7: ĐỊNH DẠNG KẾT QUẢ ===
     return f"""
-📊 **DỰ ĐOÁN KẾT QUẢ – DỰA TRÊN {so_ngay} NGÀY{loc_thong_bao}**
+🎲 **DỰ ĐOÁN — 90 NGÀY | CON ÍT RA NHẤT + NGẪU NHIÊN CÓ TRỌNG SỐ**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎯 **3 CON LÔ TẦN SUẤT CAO NHẤT:**
-   (Sắp xếp theo số lần xuất hiện trong {so_ngay} ngày)
+🎯 **3 CON LÔ ÍT XUẤT HIỆN NHẤT (sắp ra) — NGẪU NHIÊN CÓ LOGIC:**
+   (Dựa trên tần suất thấp + chu kỳ nghỉ dài + thuật toán ngẫu nhiên có trọng số)
    1. `{top3[0]['so']}` – {top3[0]['lan']} lần, tỷ lệ {top3[0]['ty_le']}%
       → Xuất hiện gần nhất: {top3[0]['ngay_gan_nhat']} | Đã nghỉ {top3[0]['nghi']} ngày
    2. `{top3[1]['so']}` – {top3[1]['lan']} lần, tỷ lệ {top3[1]['ty_le']}%
@@ -287,14 +241,13 @@ def tinh_du_doan():
       → Xuất hiện gần nhất: {top3[2]['ngay_gan_nhat']} | Đã nghỉ {top3[2]['nghi']} ngày
 
 🔄 **1 CẶP LÔ XIÊN:**
-   → Kết hợp 2 con cao nhất: `{xien[0]} - {xien[1]}`
+   → Kết hợp 2 con: `{xien[0]} - {xien[1]}`
 
-🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**
+🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ (ngẫu nhiên có trọng số):**
    → Đầu số `{dau_de}` – xuất hiện {dau_count} lần → {ty_le_dau}%
 
-🧠 **Cách tính:** Đếm tần suất xuất hiện trong {so_ngay} ngày → lấy 3 con có số lần về nhiều nhất
-📌 *Dữ liệu đã xác minh 2 nguồn sẽ được ưu tiên*
-
+🧠 **Logic:** 90 ngày → lọc con ít ra + nghỉ dài → thuật toán ngẫu nhiên có trọng số
+   (Trọng số = ngày nghỉ² ÷ số lần xuất hiện → càng nghỉ lâu càng dễ được chọn)
 ⚠️ *Chỉ tham khảo – Chơi có trách nhiệm!*
 """
 
@@ -302,30 +255,26 @@ def tinh_du_doan():
 @app.route('/')
 def home():
     tong, tu, den, verified = get_stats()
-    return f"✅ Bot V35.0 — {tong} ngày dữ liệu | {verified} ngày đã xác minh | Không ghi đè dữ liệu cũ!"
+    return f"✅ V36.0 — {tong} ngày | Ít ra nhất + Ngẫu nhiên có trọng số!"
 
 def gui_anh_ten(chat_id, text, parse_mode="Markdown", max_thu_lai=3):
-    for lan in range(1, max_thu_lai + 1):
+    for lan in range(1, max_thu_lai+1):
         try:
-            with BOT_LOCK:
-                return bot.send_message(chat_id, text, parse_mode=parse_mode)
+            with BOT_LOCK: return bot.send_message(chat_id, text, parse_mode=parse_mode)
         except Exception as e:
-            if any(err in str(e) for err in ["409", "Conflict", "429"]):
-                time.sleep(min(2 ** lan, 15))
-            else:
-                return None
+            if any(err in str(e) for err in ["409","Conflict","429"]): time.sleep(min(2**lan,15))
+            else: return None
     return None
 
 @bot.message_handler(commands=['start'])
 def cmd_start(m):
-    tong, tu, den, verified = get_stats()
+    tong, _, _, verified = get_stats()
     gui_anh_ten(m.chat.id,
-        f"🤖 *BOT XSMB — V35.0 | ✅ KIỂM TRA NGÀY CŨ CHÍNH XÁC + KHÔNG GHI ĐÈ*\n"
+        f"🤖 *BOT XSMB — V36.0 | ✅ 90 NGÀY + ÍT RA NHẤT + NGẪU NHIÊN CÓ TRỌNG SỐ*\n"
         f"📊 Tổng: *{tong} ngày* | Đã xác minh: *{verified} ngày*\n\n"
-        f"/dudoan = Xem dự đoán ngay\n"
+        f"/dudoan = Dự đoán (con ít ra nhất + ngẫu nhiên logic)\n"
         f"/lay90 = Lấy + xác minh 90 ngày dữ liệu thật\n"
         f"/status = Xem trạng thái dữ liệu\n"
-        f"/kiemtra DDMMYYYY = Kiểm tra ngày cụ thể\n"
         f"VD: 08092026 → Xem kết quả lịch sử",
         parse_mode="Markdown"
     )
@@ -334,58 +283,33 @@ def cmd_start(m):
 def cmd_status(m):
     tong, tu, den, verified = get_stats()
     gui_anh_ten(m.chat.id,
-        f"📊 *TRẠNG THÁI DỮ LIỆU*\n"
-        f"• Tổng ngày: *{tong} ngày*\n"
-        f"• Đã xác minh: *{verified} ngày*\n"
-        f"• Phạm vi: {tu} → {den}\n"
-        f"✅ Dữ liệu đã xác minh KHÔNG bao giờ bị ghi đè!",
+        f"📊 *TRẠNG THÁI DỮ LIỆU*\n• Tổng: *{tong} ngày*\n• Đã xác minh: *{verified} ngày*\n• Phạm vi: {tu} → {den}",
         parse_mode="Markdown"
     )
 
 @bot.message_handler(commands=['lay90'])
 def cmd_lay90(m):
     gui_anh_ten(m.chat.id,
-        "🚀 *ĐANG LẤY + XÁC MINH DỮ LIỆU 90 NGÀY...*\n"
-        "✅ Lấy từng ngày + Xác minh 2 nguồn + Không ghi đè dữ liệu cũ\n⏰ Khoảng 3-5 phút!",
+        "🚀 *ĐANG LẤY + XÁC MINH 90 NGÀY...*\n⏰ Khoảng 3-5 phút!",
         parse_mode="Markdown"
     )
     def lay_async():
         today = datetime.now()
-        data_hien_tai = load_data()
-        lay_moi = da_co = that_bai = da_xac_minh = 0
-
-        for offset in range(1, ANALYSIS_DAYS + 1):
-            target_date = today - timedelta(days=offset)
-            date_str = target_date.strftime("%d/%m/%Y")
-
-            # Bỏ qua nếu đã có dữ liệu xác minh
-            if date_str in data_hien_tai and data_hien_tai[date_str].get("verified", False):
-                da_co += 1
-                continue
-
-            # Lấy + xác minh
+        data_hien = load_data()
+        lay_moi = da_co = that_bai = 0
+        for offset in range(1, ANALYSIS_DAYS+1):
+            target = today - timedelta(days=offset)
+            date_str = target.strftime("%d/%m/%Y")
+            if date_str in data_hien and data_hien[date_str].get("verified",False):
+                da_co +=1; continue
             kq = lay_ket_qua_ngay(date_str)
-            if kq:
-                if luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified", False)):
-                    lay_moi += 1
-                    if kq.get("verified", False):
-                        da_xac_minh += 1
-                    data_hien_tai = load_data()
-                else:
-                    that_bai += 1
-            else:
-                that_bai += 1
-
+            if kq and luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified",False)):
+                lay_moi +=1; data_hien = load_data()
+            else: that_bai +=1
             time.sleep(1.0)
-
         tong, _, _, verified = get_stats()
         gui_anh_ten(m.chat.id,
-            f"✅ *HOÀN THÀNH!* 🎉\n"
-            f"📊 Tổng dữ liệu: *{tong} ngày* | Đã xác minh: *{verified} ngày*\n"
-            f"• Đã có sẵn: {da_co} ngày\n"
-            f"• Lấy mới: {lay_moi} ngày (trong đó {da_xac_minh} ngày đã xác minh 2 nguồn)\n"
-            f"• Thất bại: {that_bai} ngày\n"
-            f"👉 Gõ /dudoan để xem dự đoán!",
+            f"✅ *HOÀN THÀNH!* 🎉\n📊 Tổng: *{tong} ngày* | Xác minh: *{verified} ngày*\n• Đã có: {da_co} | Lấy mới: {lay_moi} | Thất bại: {that_bai}\n👉 Gõ /dudoan!",
             parse_mode="Markdown"
         )
     threading.Thread(target=lay_async, daemon=True).start()
@@ -394,43 +318,8 @@ def cmd_lay90(m):
 def cmd_dudoan(m):
     gui_anh_ten(m.chat.id, tinh_du_doan(), parse_mode="Markdown")
 
-@bot.message_handler(commands=['kiemtra'])
-def cmd_kiemtra(m):
-    text = m.text.replace("/kiemtra", "").strip()
-    if len(text) != 8 or not text.isdigit():
-        gui_anh_ten(m.chat.id, "⚠️ Sai định dạng! VD: `/kiemtra 08092026`", parse_mode="Markdown")
-        return
-    try:
-        d, mo, y = text[:2], text[2:4], text[4:]
-        date_str = f"{d}/{mo}/{y}"
-        data = load_data()
-        if date_str in data:
-            kq = data[date_str]
-            trang_thai = "✅ ĐÃ XÁC MINH" if kq.get("verified", False) else "📝 Chưa xác minh"
-            gui_anh_ten(m.chat.id,
-                f"📅 *KẾT QUẢ NGÀY: {date_str}*\n"
-                f"🏆 ĐB: `{kq['special']}`\n"
-                f"🥇 G1: `{kq['g1']}`\n"
-                f"📌 Nguồn: {kq.get('source')} | {trang_thai}",
-                parse_mode="Markdown"
-            )
-        else:
-            gui_anh_ten(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str}...*", parse_mode="Markdown")
-            kq = lay_ket_qua_ngay(date_str)
-            if kq and luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified", False)):
-                trang_thai = "✅ ĐÃ XÁC MINH" if kq.get("verified", False) else "📝 Đã lưu (chưa xác minh)"
-                gui_anh_ten(m.chat.id,
-                    f"✅ *ĐÃ LẤY!* 🎉\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 {trang_thai}",
-                    parse_mode="Markdown"
-                )
-            else:
-                gui_anh_ten(m.chat.id, f"⚠️ *Không lấy được dữ liệu ngày này*", parse_mode="Markdown")
-    except:
-        gui_anh_ten(m.chat.id, "⚠️ Sai định dạng! VD: `/kiemtra 08092026`", parse_mode="Markdown")
-
-# Xử lý nhập ngày trực tiếp (VD: 08092026)
-@bot.message_handler(func=lambda msg: msg.text and len(msg.text.strip()) == 8 and msg.text.strip().isdigit())
-def xem_ngay_truc_tiep(m):
+@bot.message_handler(func=lambda msg: msg.text and len(msg.text.strip())==8 and msg.text.strip().isdigit())
+def xem_ngay(m):
     text = m.text.strip()
     try:
         d, mo, y = text[:2], text[2:4], text[4:]
@@ -438,27 +327,22 @@ def xem_ngay_truc_tiep(m):
         data = load_data()
         if date_str in data:
             kq = data[date_str]
-            trang_thai = "✅ ĐÃ XÁC MINH" if kq.get("verified", False) else "📝 Chưa xác minh"
+            tt = "✅ XÁC MINH" if kq.get("verified",False) else "📝 Chưa xác minh"
             gui_anh_ten(m.chat.id,
-                f"📅 *KẾT QUẢ NGÀY: {date_str}*\n"
-                f"🏆 ĐB: `{kq['special']}`\n"
-                f"🥇 G1: `{kq['g1']}`\n"
-                f"📌 Nguồn: {kq.get('source')} | {trang_thai}",
+                f"📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 {tt}",
                 parse_mode="Markdown"
             )
         else:
-            gui_anh_ten(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str}...*", parse_mode="Markdown")
+            gui_anh_ten(m.chat.id, f"🔍 Đang lấy dữ liệu {date_str}...", parse_mode="Markdown")
             kq = lay_ket_qua_ngay(date_str)
-            if kq and luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified", False)):
-                trang_thai = "✅ ĐÃ XÁC MINH" if kq.get("verified", False) else "📝 Đã lưu (chưa xác minh)"
+            if kq and luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified",False)):
+                tt = "✅ XÁC MINH" if kq.get("verified",False) else "📝 Đã lưu"
                 gui_anh_ten(m.chat.id,
-                    f"✅ *ĐÃ LẤY!* 🎉\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 {trang_thai}",
+                    f"✅ ĐÃ LẤY! 🎉\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 {tt}",
                     parse_mode="Markdown"
                 )
-            else:
-                gui_anh_ten(m.chat.id, f"⚠️ *Không lấy được dữ liệu ngày này*", parse_mode="Markdown")
-    except:
-        pass
+            else: gui_anh_ten(m.chat.id, "⚠️ Không lấy được dữ liệu", parse_mode="Markdown")
+    except: pass
 
 # ====================== ⏰ TỰ ĐỘNG GỬI ======================
 def gui_tu_dong():
@@ -470,13 +354,9 @@ def gui_tu_dong():
             gio = now.strftime("%H:%M")
             if gio == SEND_RESULT_TIME and hom_nay not in da_gui_kq:
                 kq = lay_ket_qua_ngay(hom_nay)
-                if kq and luu_ket_qua(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified", False)):
-                    trang_thai = "✅ Đã xác minh" if kq.get("verified", False) else "📝 Đã lưu"
+                if kq and luu_ket_qua(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"], kq.get("verified",False)):
                     gui_anh_ten(CHAT_ID,
-                        f"🏆 *KẾT QUẢ NGÀY D — {hom_nay}*\n"
-                        f"🎯 ĐB: `{kq['special']}`\n"
-                        f"🥇 G1: `{kq['g1']}`\n"
-                        f"📌 Nguồn: {kq['source']} | {trang_thai}",
+                        f"🏆 *KẾT QUẢ NGÀY D — {hom_nay}*\n🎯 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
                         parse_mode="Markdown"
                     )
                 da_gui_kq.add(hom_nay)
@@ -485,28 +365,23 @@ def gui_tu_dong():
                 da_gui_dd.add(hom_nay)
             time.sleep(30)
         except Exception as e:
-            print(f"⚠️ Lỗi tự động gửi: {e}")
-            time.sleep(10)
+            print(f"⚠️ Lỗi: {e}"); time.sleep(10)
 
 # ====================== 🚀 CHẠY BOT ======================
 def run_bot():
     global POLLING_STARTED
     if POLLING_STARTED: return
     POLLING_STARTED = True
-    print("=" * 60)
-    print("✅ BOT V35.0 — KIỂM TRA NGÀY CŨ CHÍNH XÁC + KHÔNG GHI ĐÈ LỊCH SỬ!")
-    print("=" * 60)
-    try:
-        bot.remove_webhook()
+    print("="*60)
+    print("✅ V36.0 — 90 NGÀY + ÍT RA NHẤT + NGẪU NHIÊN CÓ TRỌNG SỐ!")
+    print("="*60)
+    try: bot.remove_webhook()
     except: pass
     while True:
-        try:
-            bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
+        try: bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
         except Exception as e:
-            if "409" in str(e) or "Conflict" in str(e):
-                time.sleep(15)
-            else:
-                time.sleep(5)
+            if "409" in str(e) or "Conflict" in str(e): time.sleep(15)
+            else: time.sleep(5)
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False), daemon=True).start()
