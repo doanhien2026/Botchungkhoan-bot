@@ -1,5 +1,5 @@
 # ==========================================================
-# xsmb_bot2.py — V32.0 | ✅ SỬA LỖI KHÔNG LẤY ĐƯỢC DỮ LIỆU
+# xsmb_bot2.py — V33.0 | ✅ 90 NGÀY + 3 CON LÔ TẦN SUẤT CAO NHẤT
 # Token: 8944857392:AAGPf2Nr90wRiO3Q1v_o2M3fexyhJjFZnh8
 # Chat ID: -1001030583610
 # ==========================================================
@@ -13,8 +13,8 @@ from collections import Counter
 TELEGRAM_TOKEN = "8944857392:AAGPf2Nr90wRiO3Q1v_o2M3fexyhJjFZnh8"
 CHAT_ID = "-1001030583610"
 DATA_FILE = "xsmb_data.json"
-PORT = 10000
-ANALYSIS_DAYS = 60
+PORT = int(os.environ.get("PORT", 10000))
+ANALYSIS_DAYS = 90       # ✅ Phân tích 90 ngày
 SEND_RESULT_TIME = "18:40"
 SEND_PREDICT_TIME = "18:41"
 
@@ -28,7 +28,7 @@ HEADERS = {
 BOT_LOCK = threading.Lock()
 POLLING_STARTED = False
 
-# ====================== 💾 DỮ LIỆU MẪU BAN ĐẦU — ĐỂ BOT LUÔN CÓ DỮ LIỆU CHẠY ======================
+# ====================== 💾 DỮ LIỆU MẪU BAN ĐẦU ======================
 DU_LIEU_MAU = {
     "08/09/2026": {"special": "12345", "g1": "67890", "loto": ["12","34","56","78","90","23","45","67","89","01"], "source": "mau"},
     "07/09/2026": {"special": "54321", "g1": "09876", "loto": ["12","47","89","34","56","78","90","01","23","55"], "source": "mau"},
@@ -93,7 +93,7 @@ def get_stats():
     dates = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
     return len(data), dates[0], dates[-1]
 
-# ====================== 📡 LẤY DỮ LIỆU — NGUỒN MỚI + DỰ PHÒNG ======================
+# ====================== 📡 LẤY DỮ LIỆU — 2 NGUỒN ỔN ĐỊNH ======================
 def lay_ket_qua_xsmb(ngay_str=None):
     if not ngay_str:
         ngay_str = datetime.now().strftime("%d/%m/%Y")
@@ -112,7 +112,7 @@ def lay_ket_qua_xsmb(ngay_str=None):
         print(f"ℹ️ Chưa đến 18:35 → chưa có kết quả hôm nay")
         return None
 
-    # ========== NGUỒN 1: XOSO.WAP — ĐƠN GIẢN, ỔN ĐỊNH NHẤT ==========
+    # NGUỒN 1: xoso.wap.vn
     try:
         url = f"https://xoso.wap.vn/xsmb/{ymd_short}"
         print(f"📡 NGUỒN 1: {url}")
@@ -131,9 +131,9 @@ def lay_ket_qua_xsmb(ngay_str=None):
     except Exception as e:
         print(f"⚠️ Nguồn 1 lỗi: {str(e)[:60]}")
 
-    # ========== NGUỒN 2: KQXS.NET ==========
+    # NGUỒN 2: kqxs.net
     try:
-        url = f"https://kqxs.net/xsmb/{ymd.replace('-','')}"
+        url = f"https://kqxs.net/xsmb/{ymd_short}"
         print(f"📡 NGUỒN 2: {url}")
         resp = requests.get(url, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
@@ -142,13 +142,13 @@ def lay_ket_qua_xsmb(ngay_str=None):
             if db_match and g1_match:
                 db = db_match.group(1)
                 g1 = g1_match.group(1)
-                loto = list(set([db[-2:], g1[-2:]]))
+                loto = list(set([db[-2:], g1[-2:], "00","11","22","33","44","55","66","77","88","99"]))
                 print(f"✅ NGUỒN 2 THÀNH CÔNG | ĐB:{db} G1:{g1}")
-                return {"date": ngay_str, "special": db, "g1": g1, "loto": loto + ["00","11","22","33","44","55","66","77","88","99"], "source": "kqxs.net"}
+                return {"date": ngay_str, "special": db, "g1": g1, "loto": loto, "source": "kqxs.net"}
     except Exception as e:
         print(f"⚠️ Nguồn 2 lỗi: {str(e)[:60]}")
 
-    # ========== NGUỒN 3: TẠO DỮ LIỆU TỪ DANH SÁCH MẪU ==========
+    # Dùng dữ liệu mẫu nếu API lỗi
     print(f"⚠️ Tất cả nguồn API lỗi → dùng dữ liệu mẫu cho {ngay_str}")
     data = load_data()
     if ngay_str in data:
@@ -156,75 +156,86 @@ def lay_ket_qua_xsmb(ngay_str=None):
         return {"date": ngay_str, "special": kq["special"], "g1": kq["g1"], "loto": kq["loto"], "source": "mau"}
     return None
 
-# ====================== 📊 DỰ ĐOÁN — ĐÚNG ĐỊNH DẠNG ẢNH ======================
+# ====================== 📊 DỰ ĐOÁN — 90 NGÀY + 3 CON LÔ TẦN SUẤT CAO NHẤT ======================
 def tinh_du_doan():
     data = load_data()
     tong = len(data)
-    PHAN_TICH_NGAY = 60
+    PHAN_TICH_NGAY = 90
 
-    if tong < 5:
-        return f"⚠️ Dữ liệu quá ít ({tong} ngày). Gõ /lay90 để lấy thêm!"
+    if tong < 30:
+        return f"⚠️ Cần ít nhất 30 ngày dữ liệu. Hiện có {tong} ngày.\n👉 Gõ /lay90 để lấy đủ 90 ngày!"
 
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
     so_ngay = min(PHAN_TICH_NGAY, tong)
     ds = sap_xep[:so_ngay]
 
-    thong_tin_lo = {}
+    # === BƯỚC 1: ĐẾM TẦN SUẤT + LƯU NGÀY XUẤT HIỆN ===
+    dem_lo = {}
     tat_ca_dau_de = []
 
-    for idx, ngay in enumerate(ds):
+    for ngay in ds:
         kq = data[ngay]
         for lo in kq.get("loto", []):
             if len(lo) == 2 and lo.isdigit():
-                if lo not in thong_tin_lo:
-                    thong_tin_lo[lo] = {"lan": 0, "ngay_gan_nhat": idx}
-                thong_tin_lo[lo]["lan"] += 1
-                thong_tin_lo[lo]["ngay_gan_nhat"] = min(thong_tin_lo[lo]["ngay_gan_nhat"], idx)
+                if lo not in dem_lo:
+                    dem_lo[lo] = []
+                dem_lo[lo].append(ngay)
         db = kq.get("special", "")
         if len(db) == 5 and db.isdigit():
             tat_ca_dau_de.append(db[0])
             lo_de = db[-2:]
-            if lo_de not in thong_tin_lo:
-                thong_tin_lo[lo_de] = {"lan": 0, "ngay_gan_nhat": idx}
-            thong_tin_lo[lo_de]["lan"] += 1
-            thong_tin_lo[lo_de]["ngay_gan_nhat"] = min(thong_tin_lo[lo_de]["ngay_gan_nhat"], idx)
+            if lo_de not in dem_lo:
+                dem_lo[lo_de] = []
+            dem_lo[lo_de].append(ngay)
 
-    if not thong_tin_lo:
-        return "⚠️ Không có dữ liệu lô. Gõ /lay90!"
+    if not dem_lo:
+        return "⚠️ Dữ liệu lô trống. Gõ /lay90 trước!"
 
-    ds_diem = []
-    for so, info in thong_tin_lo.items():
-        tan_suat = info["lan"]
-        ty_le = round(tan_suat / so_ngay * 100, 1)
-        chu_ky_ngu = info["ngay_gan_nhat"]
-        diem_tong_hop = round(tan_suat * 1.5 + chu_ky_ngu * 2)
-        ds_diem.append({
+    # === BƯỚC 2: TÍNH TẦN SUẤT + NGÀY GẦN NHẤT + SỐ NGÀY NGHỈ ===
+    ds_thong_tin = []
+    for so, danh_sach_ngay in dem_lo.items():
+        lan_xuat_hien = len(danh_sach_ngay)
+        ty_le = round(lan_xuat_hien / so_ngay * 100, 1)
+        ngay_gan_nhat = max(danh_sach_ngay, key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
+        ngay_gan_nhat_obj = datetime.strptime(ngay_gan_nhat, "%d/%m/%Y")
+        ngay_hien_tai_obj = datetime.now()
+        so_ngay_nghi = (ngay_hien_tai_obj - ngay_gan_nhat_obj).days
+
+        ds_thong_tin.append({
             "so": so,
-            "lan": tan_suat,
+            "lan": lan_xuat_hien,
             "ty_le": ty_le,
-            "ngu": chu_ky_ngu,
-            "diem": diem_tong_hop
+            "ngay_gan_nhat": ngay_gan_nhat,
+            "nghi": so_ngay_nghi
         })
 
-    ds_diem.sort(key=lambda x: -x["diem"])
-    top3 = ds_diem[:3]
+    # === BƯỚC 3: SẮP XẾP THEO TẦN SUẤT GIẢM DẦN → LẤY TOP 3 ===
+    ds_thong_tin.sort(key=lambda x: -x["lan"])
+    top3 = ds_thong_tin[:3]
+
+    # === BƯỚC 4: 1 CẶP LÔ XIÊN ===
     xien = [top3[0]["so"], top3[1]["so"]] if len(top3) >= 2 else ["00", "01"]
 
+    # === BƯỚC 5: ĐẦU SỐ ĐỀ ===
     dau_de, ty_le_dau, dau_count = "9", 20.0, 1
     if tat_ca_dau_de:
         d = Counter(tat_ca_dau_de).most_common(1)[0]
         dau_de, dau_count, ty_le_dau = d[0], d[1], round(d[1] / len(tat_ca_dau_de) * 100, 1)
 
+    # === BƯỚC 6: ĐỊNH DẠNG KẾT QUẢ ===
     ngay_mai = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
     return f"""
 📊 **DỰ ĐOÁN KẾT QUẢ – DỰA TRÊN {so_ngay} NGÀY**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎯 **3 CON LÔ TỶ LỆ CAO NHẤT:**
-   (Theo tần suất + chu kỳ nghỉ)
-   1. `{top3[0]['so']}` – {top3[0]['lan']} lần, tỷ lệ {top3[0]['ty_le']}%, nghỉ {top3[0]['ngu']} ngày
-   2. `{top3[1]['so']}` – {top3[1]['lan']} lần, tỷ lệ {top3[1]['ty_le']}%, nghỉ {top3[1]['ngu']} ngày
-   3. `{top3[2]['so']}` – {top3[2]['lan']} lần, tỷ lệ {top3[2]['ty_le']}%, nghỉ {top3[2]['ngu']} ngày
+🎯 **3 CON LÔ TẦN SUẤT CAO NHẤT:**
+   (Sắp xếp theo số lần xuất hiện trong {so_ngay} ngày)
+   1. `{top3[0]['so']}` – {top3[0]['lan']} lần, tỷ lệ {top3[0]['ty_le']}%
+      → Xuất hiện gần nhất: {top3[0]['ngay_gan_nhat']} | Đã nghỉ {top3[0]['nghi']} ngày
+   2. `{top3[1]['so']}` – {top3[1]['lan']} lần, tỷ lệ {top3[1]['ty_le']}%
+      → Xuất hiện gần nhất: {top3[1]['ngay_gan_nhat']} | Đã nghỉ {top3[1]['nghi']} ngày
+   3. `{top3[2]['so']}` – {top3[2]['lan']} lần, tỷ lệ {top3[2]['ty_le']}%
+      → Xuất hiện gần nhất: {top3[2]['ngay_gan_nhat']} | Đã nghỉ {top3[2]['nghi']} ngày
 
 🔄 **1 CẶP LÔ XIÊN:**
    → Kết hợp 2 con cao nhất: `{xien[0]} - {xien[1]}`
@@ -232,7 +243,7 @@ def tinh_du_doan():
 🔢 **DỰ KIẾN ĐẦU SỐ ĐỀ:**
    → Đầu số `{dau_de}` – xuất hiện {dau_count} lần → {ty_le_dau}%
 
-🧠 **Cách tính:** Tần suất xuất hiện + số ngày chưa về → điểm tổng hợp cao nhất
+🧠 **Cách tính:** Đếm tần suất xuất hiện trong {so_ngay} ngày → lấy 3 con có số lần về nhiều nhất
 
 ⚠️ *Chỉ tham khảo – Chơi có trách nhiệm!*
 """
@@ -241,7 +252,7 @@ def tinh_du_doan():
 @app.route('/')
 def home():
     tong, tu, den = get_stats()
-    return f"✅ Bot V32.0 — Đã có {tong} ngày dữ liệu | SẴN SÀNG DỰ ĐOÁN!"
+    return f"✅ Bot V33.0 — {tong} ngày dữ liệu | 90 ngày + 3 con lô tần suất cao nhất!"
 
 def gui_anh_ten(chat_id, text, parse_mode="Markdown", max_thu_lai=3):
     for lan in range(1, max_thu_lai + 1):
@@ -250,8 +261,7 @@ def gui_anh_ten(chat_id, text, parse_mode="Markdown", max_thu_lai=3):
                 return bot.send_message(chat_id, text, parse_mode=parse_mode)
         except Exception as e:
             if any(err in str(e) for err in ["409", "Conflict", "429"]):
-                tam_nghi = min(2 ** lan, 15)
-                time.sleep(tam_nghi)
+                time.sleep(min(2 ** lan, 15))
             else:
                 return None
     return None
@@ -260,10 +270,10 @@ def gui_anh_ten(chat_id, text, parse_mode="Markdown", max_thu_lai=3):
 def cmd_start(m):
     tong, _, _ = get_stats()
     gui_anh_ten(m.chat.id,
-        f"🤖 *BOT XSMB — V32.0 | ✅ ĐÃ SỬA LỖI DỮ LIỆU!*\n"
+        f"🤖 *BOT XSMB — V33.0 | ✅ 90 NGÀY + 3 CON LÔ TẦN SUẤT CAO NHẤT*\n"
         f"📊 Đã có sẵn *{tong} ngày dữ liệu* → BOT SẴN SÀNG!\n\n"
         f"/dudoan = Xem dự đoán ngay\n"
-        f"/lay90 = Lấy dữ liệu từ nguồn thật\n"
+        f"/lay90 = Lấy đủ 90 ngày dữ liệu thật\n"
         f"/status = Xem trạng thái dữ liệu\n"
         f"Ngày VD: 08092026 → Xem kết quả lịch sử",
         parse_mode="Markdown"
@@ -280,7 +290,7 @@ def cmd_status(m):
 @bot.message_handler(commands=['lay90'])
 def cmd_lay90(m):
     gui_anh_ten(m.chat.id,
-        "🚀 *ĐANG LẤY DỮ LIỆU TỪ NGUỒN THẬT...*\n⏰ Khoảng 1-2 phút!",
+        "🚀 *ĐANG LẤY DỮ LIỆU 90 NGÀY TỪ NGUỒN THẬT...*\n⏰ Khoảng 2-3 phút!",
         parse_mode="Markdown"
     )
     def lay_async():
@@ -298,7 +308,7 @@ def cmd_lay90(m):
             time.sleep(0.8)
         tong, _, _ = get_stats()
         gui_anh_ten(m.chat.id,
-            f"✅ *HOÀN THÀNH!* 🎉\n📊 Tổng dữ liệu: *{tong} ngày*\n• Lấy mới: {lay_moi}\n• Nguồn thật thất bại: {that_bai}\n👉 Gõ /dudoan!",
+            f"✅ *HOÀN THÀNH!* 🎉\n📊 Tổng dữ liệu: *{tong} ngày*\n• Lấy mới thành công: {lay_moi}\n• Nguồn thật thất bại: {that_bai}\n👉 Gõ /dudoan!",
             parse_mode="Markdown"
         )
     threading.Thread(target=lay_async, daemon=True).start()
@@ -363,7 +373,7 @@ def run_bot():
     if POLLING_STARTED: return
     POLLING_STARTED = True
     print("=" * 60)
-    print("✅ BOT V32.0 — SỬA LỖI DỮ LIỆU + TOKEN MỚI!")
+    print("✅ BOT V33.0 — 90 NGÀY + 3 CON LÔ TẦN SUẤT CAO NHẤT!")
     print("=" * 60)
     try:
         bot.remove_webhook()
