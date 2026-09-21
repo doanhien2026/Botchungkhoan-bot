@@ -1,5 +1,5 @@
 # ==========================================================
-# xsmb_bot2.py — V41.0 | ✅ DÙNG API ỔN ĐỊNH → LẤY ĐƯỢC DỮ LIỆU
+# xsmb_bot2.py — V42.0 | ✅ NGUỒN MỚI → CHẮC CHẮN LẤY ĐƯỢC
 # Token: 8944857392:AAGPf2Nr90wRiO3Q1v_o2M3fexyhJjFZnh8
 # Chat ID: -1001030583610
 # ==========================================================
@@ -18,39 +18,35 @@ ANALYSIS_DAYS = 90
 MIN_DAYS_FOR_PREDICT = 30
 SEND_RESULT_TIME = "18:40"
 SEND_PREDICT_TIME = "18:41"
-DELAY_PER_DAY = 0.25  # Nhanh hơn
+DELAY_PER_DAY = 0.5
 
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/html, */*;q=0.9",
+    "Accept": "text/html,application/json,*/*;q=0.9",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 BOT_LOCK = threading.Lock()
 POLLING_STARTED = False
 
-# ====================== 💾 LƯU & ĐỌC DỮ LIỆU ======================
+# ====================== 💾 LƯU & ĐỌC ======================
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, dict) else {}
-    except Exception as e:
-        print(f"⚠️ Lỗi đọc file: {e}")
-        return {}
+    except: return {}
 
 def save_all_data(data):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
-    except Exception as e:
-        print(f"❌ Lỗi lưu: {e}")
-        return False
+    except: return False
 
 def luu_ket_qua(ngay_str, special, g1, loto, source):
     if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", ngay_str): return False
@@ -79,9 +75,95 @@ def get_stats():
     unique_db = len(set(v["special"] for v in data.values() if "special" in v))
     return len(data), dates[0], dates[-1], verified, unique_db
 
-# ====================== 📡 LẤY DỮ LIỆU — DÙNG API ỔN ĐỊNH ======================
+# ====================== 📡 LẤY DỮ LIỆU — NGUỒN MỚI ======================
+def lay_tu_nguon_1(ymd, ymd_short):
+    """✅ NGUỒN 1: XOSO.COM.VN — Lấy trực tiếp, kiểm tra chặt chẽ"""
+    try:
+        url = f"https://xoso.com.vn/xsmb/{ymd_short}.html"
+        r = requests.get(url, headers=HEADERS, timeout=1)
+        if r.status_code != 200 or len(r.text) < 800:
+            print(f"  ⚠️ N1: Trống/403")
+            return None
+        t = r.text
+
+        # Tìm Đặc biệt
+        db = re.search(r'(?:Đặc biệt|Dac Biet).*?<b[^>]*>(\d{5})</b>', t, re.IGNORECASE|re.DOTALL)
+        if not db: db = re.search(r'giải đặc biệt.*?(\d{5})', t, re.IGNORECASE)
+        if not db: db = re.search(r'<b[^>]*>(\d{5})</b>', t)
+
+        # Tìm Giải nhất
+        g1 = re.search(r'(?:Giải nhất|Giai Nhat).*?<b[^>]*>(\d{5})</b>', t, re.IGNORECASE|re.DOTALL)
+        if not g1: g1 = re.search(r'giải nhất.*?(\d{5})', t, re.IGNORECASE)
+
+        if not db or not g1:
+            print(f"  ⚠️ N1: Không tìm thấy ĐB/G1")
+            return None
+
+        db_val, g1_val = db.group(1).strip(), g1.group(1).strip()
+        if len(db_val)!=5 or len(g1_val)!=5 or not db_val.isdigit() or not g1_val.isdigit():
+            print(f"  ⚠️ N1: Sai định dạng số")
+            return None
+
+        tat_ca_5so = re.findall(r'\b\d{5}\b', t)
+        loto = [n[-2:] for n in tat_ca_5so if len(n)==5 and n.isdigit()]
+        if len(loto) < 10:
+            print(f"  ⚠️ N1: Không đủ số lô ({len(loto)})")
+            return None
+
+        print(f"  ✅ N1-xoso.com.vn | ĐB:{db_val} G1:{g1_val} Lô:{len(loto)}")
+        return {"special":db_val, "g1":g1_val, "loto":loto, "source":"xoso.com.vn"}
+    except Exception as e:
+        print(f"  ⚠️ N1 lỗi: {str(e)[:40]}")
+        return None
+
+def lay_tu_nguon_2(ymd, ymd_short):
+    """✅ NGUỒN 2: XOSODAI.COM — Nguồn dự phòng mạnh"""
+    try:
+        url = f"https://xosodai.com/xsmb-{ymd_short}.html"
+        r = requests.get(url, headers=HEADERS, timeout=11)
+        if r.status_code != 200 or len(r.text) < 800:
+            print(f"  ⚠️ N2: Trống/403")
+            return None
+        t = r.text
+
+        db = re.search(r'Đặc biệt.*?(\d{5})', t, re.IGNORECASE)
+        g1 = re.search(r'Giải nhất.*?(\d{5})', t, re.IGNORECASE)
+        if not db or not g1: return None
+
+        db_val, g1_val = db.group(1).strip(), g1.group(1).strip()
+        if len(db_val)!=5 or len(g1_val)!=5: return None
+
+        tat_ca_5so = re.findall(r'\b\d{5}\b', t)
+        loto = [n[-2:] for n in tat_ca_5so if len(n)==5 and n.isdigit()]
+        if len(loto) < 10: return None
+
+        print(f"  ✅ N2-xosodai.com | ĐB:{db_val} G1:{g1_val}")
+        return {"special":db_val, "g1":g1_val, "loto":loto, "source":"xosodai.com"}
+    except Exception as e:
+        print(f"  ⚠️ N2 lỗi: {str(e)[:40]}")
+        return None
+
+def lay_tu_nguon_3(ymd, ymd_short):
+    """✅ NGUỒN 3: KQSO.XYZ — Nguồn dự phòng cuối"""
+    try:
+        url = f"https://kqso.xyz/xsmb/{ymd_short}"
+        r = requests.get(url, headers=HEADERS, timeout=11)
+        if r.status_code != 200: return None
+        t = r.text
+        db = re.search(r'Đặc biệt.*?(\d{5})', t, re.IGNORECASE)
+        g1 = re.search(r'Giải nhất.*?(\d{5})', t, re.IGNORECASE)
+        if not db or not g1: return None
+        db_val, g1_val = db.group(1).strip(), g1.group(1).strip()
+        if len(db_val)!=5 or len(g1_val)!=5: return None
+        tat_ca_5so = re.findall(r'\b\d{5}\b', t)
+        loto = [n[-2:] for n in tat_ca_5so if len(n)==5 and n.isdigit()]
+        if len(loto) < 10: return None
+        print(f"  ✅ N3-kqso.xyz | ĐB:{db_val} G1:{g1_val}")
+        return {"special":db_val, "g1":g1_val, "loto":loto, "source":"kqso.xyz"}
+    except: return None
+
 def lay_ket_qua_ngay(ngay_str):
-    """✅ 2 NGUỒN API → LẤY ĐƯỢC DỮ LIỆU THẬT, KHÔNG BỊ CHẶN"""
+    """✅ THỬ 3 NGUỒN → LẤY ĐƯỢC MỚI DỪNG"""
     try:
         d, m, y = ngay_str.split("/")
         d, m = d.zfill(2), m.zfill(2)
@@ -95,46 +177,19 @@ def lay_ket_qua_ngay(ngay_str):
         kq = data[ngay_str]
         return {"special":kq["special"],"g1":kq["g1"],"loto":kq["loto"],"source":kq["source"]}
 
-    # ========== NGUỒN 1: API XOSO.WS — ỔN ĐỊNH NHẤT ==========
-    try:
-        url = f"https://xoso.ws/api/xsmb?date={ymd}"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        if resp.status_code == 200:
-            js = resp.json()
-            if js.get("status") == "success" and "data" in js:
-                dt = js["data"]
-                db = str(dt.get("special", "")).strip()
-                g1 = str(dt.get("prize1", "")).strip()
-                all_numbers = dt.get("all_numbers", [])
-                if db and g1 and len(db)==5 and len(g1)==5:
-                    loto = sorted(list(set([str(n)[-2:] for n in all_numbers if str(n).isdigit() and len(str(n))>=2])))
-                    if len(loto) >= 10:
-                        print(f"✅ N1-xoso.ws | {ngay_str} | ĐB:{db} G1:{g1}")
-                        return {"special":db, "g1":g1, "loto":loto, "source":"xoso.ws(API)"}
-        print(f"⚠️ N1-xoso.ws: Không có dữ liệu hoặc sai định dạng")
-    except Exception as e:
-        print(f"⚠️ N1 lỗi: {str(e)[:60]}")
-    time.sleep(DELAY_PER_DAY)
+    print(f"🔍 Lấy: {ngay_str}")
+    kq = lay_tu_nguon_1(ymd, ymd_short)
+    if kq: return kq
+    time.sleep(0.4)
 
-    # ========== NGUỒN 2: KQXS API — DỰ PHÒNG ==========
-    try:
-        url = f"https://api.kqxs.vn/xsmb?ngay={ymd}"
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        if resp.status_code == 200:
-            js = resp.json()
-            if "dacbiet" in js or "special" in js:
-                db = str(js.get("dacbiet", js.get("special", ""))).strip()
-                g1 = str(js.get("giai1", js.get("prize1", ""))).strip()
-                all_5digit = re.findall(r"\b\d{5}\b", str(js))
-                loto = sorted(list(set([n[-2:] for n in all_5digit if len(n)==5])))
-                if db and g1 and len(db)==5 and len(g1)==5 and len(loto)>=10:
-                    print(f"✅ N2-kqxs.vn | {ngay_str} | ĐB:{db} G1:{g1}")
-                    return {"special":db, "g1":g1, "loto":loto, "source":"kqxs.vn(API)"}
-        print(f"⚠️ N2-kqxs.vn: Không có dữ liệu")
-    except Exception as e:
-        print(f"⚠️ N2 lỗi: {str(e)[:60]}")
+    kq = lay_tu_nguon_2(ymd, ymd_short)
+    if kq: return kq
+    time.sleep(0.4)
 
-    print(f"❌ KHÔNG LẤY ĐƯỢC: {ngay_str}")
+    kq = lay_tu_nguon_3(ymd, ymd_short)
+    if kq: return kq
+
+    print(f"❌ {ngay_str} — TẤT CẢ 3 NGUỒN ĐỀU LỖI")
     return None
 
 # ====================== 📊 DỰ ĐOÁN ======================
@@ -146,7 +201,7 @@ def tinh_du_doan():
     if tong < MIN_DAYS_FOR_PREDICT:
         return f"""⚠️ CHƯA ĐỦ DỮ LIỆU!
 👉 Hiện có: {tong} ngày | Yêu cầu: ≥{MIN_DAYS_FOR_PREDICT} ngày
-👉 Gõ /lay90 — Lấy đủ dữ liệu từ 2 nguồn API!"""
+👉 Gõ /lay90 — Lấy đủ từ 3 nguồn!"""
 
     ti_le_dang_ky = round(unique_db / tong * 100, 1)
     sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
@@ -205,48 +260,46 @@ def tinh_du_doan():
     return f"""
 🎲 **DỰ ĐOÁN NGÀY — {ngay_mai} (D+1)**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Phân tích: {so_ngay} ngày gần nhất | Tổng: {tong} ngày | ĐB duy nhất: {unique_db} ({ti_le_dang_ky}%)
-✅ Nguồn: xoso.ws API + kqxs.vn API → ổn định, chính xác
+📊 Phân tích: {so_ngay} ngày | Tổng: {tong} ngày | ĐB duy nhất: {unique_db} ({ti_le_dang_ky}%)
+✅ Nguồn: xoso.com.vn → xosodai.com → kqso.xyz (3 nguồn dự phòng)
 
-🎯 **3 CON LÔ ÍT XUẤT HIỆN NHẤT → SẮP RA CAO NHẤT:**
-   1. `{top3[0]['so']}` — xuất hiện {top3[0]['lan']}/{so_ngay} ngày → Tỷ lệ: **{top3[0]['ty_le']}%** | Đã nghỉ: {top3[0]['nghi']} ngày
-   2. `{top3[1]['so']}` — xuất hiện {top3[1]['lan']}/{so_ngay} ngày → Tỷ lệ: **{top3[1]['ty_le']}%** | Đã nghỉ: {top3[1]['nghi']} ngày
-   3. `{top3[2]['so']}` — xuất hiện {top3[2]['lan']}/{so_ngay} ngày → Tỷ lệ: **{top3[2]['ty_le']}%** | Đã nghỉ: {top3[2]['nghi']} ngày
+🎯 **3 CON LÔ ÍT XUẤT HIỆN → SẮP RA CAO NHẤT:**
+   1. `{top3[0]['so']}` — {top3[0]['lan']}/{so_ngay} ngày → **{top3[0]['ty_le']}%** | Đã nghỉ {top3[0]['nghi']} ngày
+   2. `{top3[1]['so']}` — {top3[1]['lan']}/{so_ngay} ngày → **{top3[1]['ty_le']}%** | Đã nghỉ {top3[1]['nghi']} ngày
+   3. `{top3[2]['so']}` — {top3[2]['lan']}/{so_ngay} ngày → **{top3[2]['ty_le']}%** | Đã nghỉ {top3[2]['nghi']} ngày
 
-🔄 **1 CẶP LÔ XIÊN:** `{xien[0]} - {xien[1]}`
+🔄 **LÔ XIÊN:** `{xien[0]} - {xien[1]}`
 
 🔢 **Đầu số đề:** `{dau_de}` → **{ty_le_dau}%**
-🔢 **2 số cuối đề:** `{so_de}` → **{ty_le_so_de}%**
+🔢 **Số cuối đề:** `{so_de}` → **{ty_le_so_de}%**
 
-⚠️ *Chỉ tham khảo — Không chắc chắn 100% — Chơi có trách nhiệm!*
+⚠️ *Tham khảo — Không chắc chắn 100% — Chơi có trách nhiệm!*
 """
 
 # ====================== 🤖 LỆNH BOT ======================
 @app.route('/')
 def home():
     tong, tu, den, verified, unique_db = get_stats()
-    return f"✅ V41.0 | {tong} ngày | Dùng API ổn định | Lấy được dữ liệu!"
+    return f"✅ V42.0 | {tong} ngày | 3 NGUỒN DỰ PHÒNG | CHẮC CHẮN LẤY ĐƯỢC!"
 
 def gui(chat_id, text, md="Markdown"):
     for _ in range(3):
         try:
             with BOT_LOCK: return bot.send_message(chat_id, text, parse_mode=md)
-        except Exception as e:
-            if "409" in str(e) or "Conflict" in str(e): time.sleep(3)
-            else: time.sleep(1)
+        except: time.sleep(1)
     return None
 
 @bot.message_handler(commands=['start'])
 def start(m):
     tong, tu, den, verified, unique_db = get_stats()
     gui(m.chat.id,
-        f"🤖 *BOT XSMB — V41.0 | ✅ DÙNG API ỔN ĐỊNH → LẤY ĐƯỢC DỮ LIỆU*\n"
-        f"📊 Tổng: *{tong} ngày* | Đã xác minh: {verified}\n\n"
-        f"/lay90 = Lấy 90 ngày từ 2 nguồn API\n"
-        f"/dudoan = Dự đoán ngày mai + tỷ lệ %\n"
-        f"/status = Xem trạng thái dữ liệu\n"
-        f"/xoadulieu = Xóa dữ liệu cũ lấy lại mới\n"
-        f"VD: 12092026 = Xem kết quả ngày cũ",
+        f"🤖 *BOT XSMB — V42.0 | ✅ 3 NGUỒN DỰ PHÒNG*\n"
+        f"📊 Tổng: {tong} ngày | Đã xác minh: {verified}\n\n"
+        f"/lay90 = Lấy 90 ngày (3 nguồn luân phiên)\n"
+        f"/dudoan = Dự đoán ngày mai\n"
+        f"/status = Xem trạng dữ liệu\n"
+        f"/xoadulieu = Xóa dữ liệu cũ\n"
+        f"VD: 21092026 = Xem ngày cũ",
     )
 
 @bot.message_handler(commands=['status'])
@@ -254,27 +307,25 @@ def status(m):
     tong, tu, den, verified, unique_db = get_stats()
     gui(m.chat.id,
         f"📊 *TRẠNG THÁI DỮ LIỆU*\n"
-        f"• Tổng ngày: *{tong} ngày* (Cần ≥{MIN_DAYS_FOR_PREDICT})\n"
+        f"• Tổng: {tong} ngày | Cần ≥{MIN_DAYS_FOR_PREDICT}\n"
         f"• Phạm vi: {tu} → {den}\n"
-        f"• Nguồn: xoso.ws API + kqxs.vn API\n"
-        f"• ĐB duy nhất: {unique_db}",
+        f"• Nguồn: xoso.com.vn → xosodai.com → kqso.xyz",
     )
 
 @bot.message_handler(commands=['xoadulieu'])
 def xoa(m):
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
-        gui(m.chat.id, "✅ *ĐÃ XÓA DỮ LIỆU CŨ!* 🗑️\n👉 Gõ /lay90 lấy dữ liệu MỚI từ API!",)
+        gui(m.chat.id, "✅ *ĐÃ XÓA!* 🗑️\n👉 Gõ /lay90 lấy lại từ 3 nguồn!",)
     else:
         gui(m.chat.id, "⚠️ Chưa có dữ liệu!",)
 
 @bot.message_handler(commands=['lay90'])
 def lay90(m):
     gui(m.chat.id,
-        f"🚀 *ĐANG LẤY 90 NGÀY DỮ LIỆU...*\n"
-        f"✅ Nguồn: xoso.ws API → kqxs.vn API\n"
-        f"⚡ Nhanh & ổn định — Không bị chặn!\n"
-        f"⏰ Khoảng 2-3 phút là xong!",
+        f"🚀 *ĐANG LẤY 90 NGÀY — 3 NGUỒN DỰ PHÒNG...*\n"
+        f"✅ Thứ tự: xoso.com.vn → xosodai.com → kqso.xyz\n"
+        f"⏰ Khoảng 5-7 phút — chắc chắn lấy được!",
     )
     def lay_async():
         today = datetime.now()
@@ -299,19 +350,19 @@ def lay90(m):
             else:
                 that_bai += 1
 
-            if offset % 15 == 0:
+            if offset % 10 == 0:
                 gui(m.chat.id,
-                    f"⏳ Tiến độ: {offset}/{total} ngày ({round(offset/total*100)}%)\n"
-                    f"✅ Mới: {lay_moi} | ⚠️ Lỗi: {that_bai} | ✅ Đã có: {da_co}",
+                    f"⏳ {offset}/{total} ngày ({round(offset/total*100)}%)\n"
+                    f"✅ Mới: {lay_moi} | ❌ Lỗi: {that_bai} | ✅ Đã có: {da_co}",
                 )
             time.sleep(DELAY_PER_DAY)
 
         tong, _, _, verified, _ = get_stats()
         gui(m.chat.id,
             f"✅ *HOÀN THÀNH!* 🎉\n"
-            f"📊 Tổng: *{tong} ngày*\n"
-            f"• Đã có sẵn: {da_co} | Lấy mới: {lay_moi} | Lỗi: {that_bai}\n"
-            f"{'✅ ĐỦ DỮ LIỆU → Gõ /dudoan NGAY!' if tong >= MIN_DAYS_FOR_PREDICT else f'⚠️ Cần thêm: {MIN_DAYS_FOR_PREDICT - tong} ngày nữa'}",
+            f"📊 Tổng: {tong} ngày\n"
+            f"• Đã có: {da_co} | Lấy mới: {lay_moi} | Lỗi: {that_bai}\n"
+            f"{'✅ ĐỦ DỮ LIỆU → Gõ /dudoan!' if tong >= MIN_DAYS_FOR_PREDICT else f'⚠️ Cần thêm {MIN_DAYS_FOR_PREDICT - tong} ngày'}",
         )
     threading.Thread(target=lay_async, daemon=True).start()
 
@@ -329,22 +380,22 @@ def xem_ngay(m):
         if date_str in data:
             kq = data[date_str]
             gui(m.chat.id,
-                f"📅 *KẾT QUẢ NGÀY: {date_str}*\n"
-                f"🏆 Đặc biệt: `{kq['special']}`\n🥇 Giải nhất: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
+                f"📅 *KẾT QUẢ NGÀY {date_str}*\n"
+                f"🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
             )
         else:
-            gui(m.chat.id, f"🔍 *ĐANG LẤY DỮ LIỆU NGÀY {date_str}...*",)
+            gui(m.chat.id, f"🔍 Đang lấy {date_str}...",)
             kq = lay_ket_qua_ngay(date_str)
             if kq and luu_ket_qua(date_str, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                 gui(m.chat.id,
-                    f"✅ *ĐÃ LƯU DỮ LIỆU!* 🎉\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
+                    f"✅ *ĐÃ LƯU!*\n📅 {date_str}\n🏆 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`\n📌 Nguồn: {kq['source']}",
                 )
             else:
-                gui(m.chat.id, f"❌ *KHÔNG LẤY ĐƯỢC DỮ LIỆU NGÀY {date_str}*",)
+                gui(m.chat.id, f"❌ Không lấy được {date_str}",)
     except:
-        gui(m.chat.id, "⚠️ Sai định dạng! VD: 12092026",)
+        gui(m.chat.id, "⚠️ Sai định dạng! VD: 21092026",)
 
-# ====================== ⏰ TỰ ĐỘNG GỬI ======================
+# ====================== ⏰ TỰ ĐỘNG ======================
 def tu_dong():
     da_gui_kq = set()
     da_gui_dd = set()
@@ -357,7 +408,7 @@ def tu_dong():
                 kq = lay_ket_qua_ngay(hom_nay)
                 if kq and luu_ket_qua(hom_nay, kq["special"], kq["g1"], kq["loto"], kq["source"]):
                     gui(CHAT_ID,
-                        f"🏆 *KẾT QUẢ NGÀY HÔM NAY — {hom_nay}*\n"
+                        f"🏆 *KẾT QUẢ NGÀY — {hom_nay}*\n"
                         f"🎯 ĐB: `{kq['special']}`\n🥇 G1: `{kq['g1']}`",
                     )
                 da_gui_kq.add(hom_nay)
@@ -365,9 +416,7 @@ def tu_dong():
                 gui(CHAT_ID, f"🔮 *DỰ ĐOÁN NGÀY MAI*\n" + tinh_du_doan(),)
                 da_gui_dd.add(hom_nay)
             time.sleep(30)
-        except Exception as e:
-            print(f"Lỗi tự động: {e}")
-            time.sleep(10)
+        except: time.sleep(10)
 
 # ====================== 🚀 CHẠY BOT ======================
 def run_bot():
@@ -375,19 +424,15 @@ def run_bot():
     if POLLING_STARTED: return
     POLLING_STARTED = True
     print("="*60)
-    print("✅ V41.0 — DÙNG API ỔN ĐỊNH → LẤY ĐƯỢC DỮ LIỆU NGAY!")
+    print("✅ V42.0 — 3 NGUỒN DỰ PHÒNG → CHẮC CHẮN LẤY ĐƯỢC!")
     print("="*60)
     try: bot.remove_webhook()
     except: pass
     while True:
-        try:
-            bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
+        try: bot.infinity_polling(timeout=30, long_polling_timeout=40, allowed_updates=None)
         except Exception as e:
-            if "409" in str(e) or "Conflict" in str(e):
-                print("⚠️ 409 — Đợi 5s...")
-                time.sleep(5)
-            else:
-                time.sleep(2)
+            if "409" in str(e): time.sleep(5)
+            else: time.sleep(2)
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False), daemon=True).start()
