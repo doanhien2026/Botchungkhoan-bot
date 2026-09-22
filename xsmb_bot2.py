@@ -1,5 +1,5 @@
 # ==========================================================
-# xsmb_bot2.py — V45.0 | ✅ GÕ NGÀY → BÁO KQ TỰ ĐỘNG
+# xsmb_bot2.py — V46.0 | ✅ TEST DỰ ĐOÁN NGÀY CŨ
 # Token: 8944857392:AAGPf2Nr90wRiO3Q1v_o2M3fexyhJjFZnh8
 # Chat ID: -1001030583610
 # ==========================================================
@@ -39,12 +39,10 @@ def save_all_data(data):
     except: return False
 
 def luu_ngay(ngay_str, db, g1):
-    """✅ Lưu kết quả 1 ngày"""
     if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", ngay_str): return False
     if len(db)!=5 or not db.isdigit(): return False
     if len(g1)!=5 or not g1.isdigit(): return False
     
-    # Tạo danh sách lô từ 2 số cuối tất cả
     loto = [db[-2:], g1[-2:]]
     for i in range(10):
         loto.append(f"{i:02d}")
@@ -66,26 +64,15 @@ def get_stats():
     dates = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"))
     return len(data), dates[0], dates[-1]
 
-# ====================== 📊 DỰ ĐOÁN ======================
-def tinh_du_doan():
-    data = load_data()
-    tong, tu, den = get_stats()
-    ngay_mai = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-
-    if tong < MIN_DAYS:
-        return f"""⚠️ Cần đủ {MIN_DAYS} ngày
-👉 Đã nhập: {tong} ngày
-👉 Cách nhập: /nhap 21092026 51540 38291
-   → Ngày + Đặc biệt + Giải nhất
-👉 Mở xoso.com.vn lấy số thật!"""
-
-    sap_xep = sorted(data.keys(), key=lambda d: datetime.strptime(d, "%d/%m/%Y"), reverse=True)
+# ====================== 📊 TÍNH DỰ ĐOÁN ======================
+def tinh_du_doan_tu_du_lieu(danh_sach_ngay):
+    """Tính dự đoán từ danh sách dữ liệu cho trước"""
     dem_lo = {}
     dau_de = []
     cuoi_de = []
     
-    for ngay in sap_xep:
-        kq = data[ngay]
+    for ngay in danh_sach_ngay:
+        kq = danh_sach_ngay[ngay]
         db = kq["special"]
         dau_de.append(db[0])
         cuoi_de.append(db[-2:])
@@ -93,11 +80,15 @@ def tinh_du_doan():
             if lo not in dem_lo: dem_lo[lo] = []
             dem_lo[lo].append(ngay)
 
-    # Chọn 3 con ít xuất hiện nhất + nghỉ lâu nhất
+    tong_ngay = len(danh_sach_ngay)
+    if tong_ngay < 5:
+        return None, None, None, None, "Ít dữ liệu quá"
+
+    # 3 con lô ít xuất hiện nhất + nghỉ lâu nhất
     thong_tin = []
     for so, ngay_list in dem_lo.items():
         lan = len(ngay_list)
-        ty_le = round(lan / tong * 100, 1)
+        ty_le = round(lan / tong_ngay * 100, 1)
         gan_nhat = max(ngay_list, key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
         ngay_gan = datetime.strptime(gan_nhat, "%d/%m/%Y")
         nghi = (datetime.now() - ngay_gan).days
@@ -105,32 +96,77 @@ def tinh_du_doan():
 
     thong_tin.sort(key=lambda x: (x["lan"], -x["nghi"]))
     top3 = thong_tin[:3]
-    xien = [top3[0]["so"], top3[1]["so"]]
+    xien = [top3[0]["so"], top3[1]["so"]] if len(top3)>=2 else ["--", "--"]
 
-    # Đầu số đề
+    # Đầu số đề ít xuất hiện
     cnt_dau = Counter(dau_de)
     it_dau = sorted(cnt_dau.items(), key=lambda x: x[1])[0]
-    # 2 số cuối đề
+    # 2 số cuối đề ít xuất hiện
     cnt_cuoi = Counter(cuoi_de)
     it_cuoi = sorted(cnt_cuoi.items(), key=lambda x: x[1])[0]
 
-    return f"""
-🎲 DỰ ĐOÁN — {ngay_mai}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Dữ liệu: {tong} ngày thật
+    return top3, xien, it_dau, it_cuoi, tong_ngay
 
-🎯 3 CON LÔ ÍT VỀ NHẤT:
-  1. {top3[0]['so']} — {top3[0]['lan']} lần | {top3[0]['ty_le']}% | nghỉ {top3[0]['nghi']} ngày
-  2. {top3[1]['so']} — {top3[1]['lan']} lần | {top3[1]['ty_le']}% | nghỉ {top3[1]['nghi']} ngày
-  3. {top3[2]['so']} — {top3[2]['lan']} lần | {top3[2]['ty_le']}% | nghỉ {top3[2]['nghi']} ngày
+# ====================== 🧪 TEST DỰ ĐOÁN NGÀY CŨ ======================
+def test_ngay_cu(ngay_str):
+    """Test dự đoán 1 ngày trong quá khứ"""
+    data = load_data()
+    if ngay_str not in data:
+        return None, f"⚠️ Chưa có dữ liệu ngày {ngay_str}"
+    
+    # Lấy tất cả dữ liệu TRƯỚC ngày cần test
+    ngay_muc_tieu = datetime.strptime(ngay_str, "%d/%m/%Y")
+    du_lieu_truoc = {}
+    for n in data:
+        if datetime.strptime(n, "%d/%m/%Y") < ngay_muc_tieu:
+            du_lieu_truoc[n] = data[n]
+    
+    if len(du_lieu_truoc) < 10:
+        return None, f"⚠️ Chưa đủ dữ liệu trước ngày {ngay_str} (cần ít nhất 10 ngày)"
+    
+    # Tính dự đoán
+    top3, xien, it_dau, it_cuoi, tong = tinh_du_doan_tu_du_lieu(du_lieu_truoc)
+    if not top3:
+        return None, "⚠️ Không tính được dự đoán"
+    
+    # Kết quả thực tế ngày đó
+    kq_thuc_te = data[ngay_str]
+    db_thuc = kq_thuc_te["special"]
+    cuoi_thuc = db_thuc[-2:]
+    dau_thuc = db_thuc[0]
+    lo_thuc = kq_thuc_te["loto"]
 
-🔄 XIÊN 2: {xien[0]} - {xien[1]}
+    # Đối chiếu
+    kiem_tra_top3 = []
+    for con in top3:
+        trung = "✅ TRÚNG" if con["so"] in lo_thuc else "❌ KHÔNG"
+        kiem_tra_top3.append(f"  {con['so']} — {trung}")
+    
+    trung_xien = "✅ TRÚNG" if xien[0] in lo_thuc and xien[1] in lo_thuc else "❌ KHÔNG"
+    trung_dau = "✅ TRÚNG" if it_dau[0] == dau_thuc else "❌ KHÔNG"
+    trung_cuoi = "✅ TRÚNG" if it_cuoi[0] == cuoi_thuc else "❌ KHÔNG"
 
-🔢 Đầu số đề: {it_dau[0]} — {round(it_dau[1]/tong*100,1)}%
-🔢 2 số cuối đề: {it_cuoi[0]} — {round(it_cuoi[1]/tong*100,1)}%
+    ket_qua = f"""
+🧪 KIỂM TRA DỰ ĐOÁN NGÀY: {ngay_str}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Dữ liệu phân tích: {tong} ngày trước đó
 
-⚠️ Dựa trên số thật — Tham khảo!
+🔮 DỰ ĐOÁN:
+🎯 3 CON LÔ:
+{chr(10).join(kiem_tra_top3)}
+
+🔄 XIÊN 2: {xien[0]} - {xien[1]} → {trung_xien}
+
+🔢 Đầu số đề: {it_dau[0]} → {trung_dau}
+🔢 2 số cuối đề: {it_cuoi[0]} → {trung_cuoi}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 KẾT QUẢ THỰC TẾ NGÀY {ngay_str}:
+🏆 Đặc biệt: {db_thuc}
+  → Đầu: {dau_thuc} | Cuối: {cuoi_thuc}
+🥇 Giải nhất: {kq_thuc_te['g1']}
 """
+    return True, ket_qua
 
 # ====================== 🤖 LỆNH BOT ======================
 def gui(chat_id, text):
@@ -143,14 +179,15 @@ def gui(chat_id, text):
 @bot.message_handler(commands=['start'])
 def start(m):
     tong, tu, den = get_stats()
-    gui(m.chat.id, f"""🤖 BOT XSMB — V45.0
+    gui(m.chat.id, f"""🤖 BOT XSMB — V46.0
 📊 Đã nhập: {tong}/{MIN_DAYS} ngày
 
-✅ Cách dùng đơn giản:
+✅ LỆNH SỬ DỤNG:
 /nhap 21092026 51540 38291 → Lưu kết quả
-21092026 → Gõ ngày → tự báo kết quả
-/dudoan → Xem dự đoán
-/status → Xem tổng số ngày
+21092026 → Xem lịch sử ngày này
+/test 21092026 → ✅ TEST dự đoán ngày cũ
+/dudoan → Dự đoán ngày mai
+/status → Xem tổng trạng
 /xoa → Xóa dữ liệu cũ
 """)
 
@@ -160,8 +197,7 @@ def nhap(m):
     if len(parts) != 4:
         gui(m.chat.id, """⚠️ Đúng định dạng:
 /nhap 21092026 51540 38291
-→ Ngày + Đặc biệt + Giải nhất
-Không dấu / trong ngày!""")
+→ Ngày + Đặc biệt + Giải nhất""")
         return
     try:
         _, ngay_raw, db, g1 = parts
@@ -178,9 +214,30 @@ Không dấu / trong ngày!""")
 🏆 Đặc biệt: `{db}`
 🥇 Giải nhất: `{g1}`
 📊 Tổng: {tong}/{MIN_DAYS} ngày
-{f'👉 Gõ /dudoan xem dự đoán!' if tong >= MIN_DAYS else f'Cần thêm {MIN_DAYS - tong} ngày nữa'}""")
+👉 Gõ /test {ngay_raw} để kiểm tra dự đoán ngày này!""")
     else:
         gui(m.chat.id, "❌ Sai! Kiểm tra: 5 chữ số, không khoảng trắng")
+
+# ✅ LỆNH MỚI: TEST DỰ ĐOÁN NGÀY CŨ
+@bot.message_handler(commands=['test'])
+def test_ngay(m):
+    parts = m.text.strip().split()
+    if len(parts) != 2:
+        gui(m.chat.id, """⚠️ Đúng định dạng:
+/test 21092026
+→ Kiểm tra dự đoán ngày 21/09/2026
+So sánh dự đoán vs kết quả thực tế!""")
+        return
+    try:
+        _, ngay_raw = parts
+        d, mo, y = ngay_raw[:2], ngay_raw[2:4], ngay_raw[4:]
+        ngay_str = f"{d}/{mo}/{y}"
+    except:
+        gui(m.chat.id, "⚠️ Ngày phải 8 số: 21092026")
+        return
+
+    ok, ket_qua = test_ngay_cu(ngay_str)
+    gui(m.chat.id, ket_qua)
 
 @bot.message_handler(commands=['status'])
 def status(m):
@@ -192,7 +249,34 @@ Từ {tu} đến {den}
 
 @bot.message_handler(commands=['dudoan'])
 def dudoan(m):
-    gui(m.chat.id, tinh_du_doan())
+    data = load_data()
+    tong, tu, den = get_stats()
+    ngay_mai = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
+    
+    if tong < MIN_DAYS:
+        gui(m.chat.id, f"""⚠️ Cần đủ {MIN_DAYS} ngày
+👉 Đã nhập: {tong} ngày
+👉 Tiếp tục nhập thêm {MIN_DAYS - tong} ngày nữa!""")
+        return
+
+    top3, xien, it_dau, it_cuoi, _ = tinh_du_doan_tu_du_lieu(data)
+    gui(m.chat.id, f"""
+🎲 DỰ ĐOÁN — NGÀY {ngay_mai}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Dữ liệu: {tong} ngày thật
+
+🎯 3 CON LÔ ÍT VỀ NHẤT:
+  1. {top3[0]['so']} — {top3[0]['lan']} lần | {top3[0]['ty_le']}% | nghỉ {top3[0]['nghi']} ngày
+  2. {top3[1]['so']} — {top3[1]['lan']} lần | {top3[1]['ty_le']}% | nghỉ {top3[1]['nghi']} ngày
+  3. {top3[2]['so']} — {top3[2]['lan']} lần | {top3[2]['ty_le']}% | nghỉ {top3[2]['nghi']} ngày
+
+🔄 XIÊN 2: {xien[0]} - {xien[1]}
+
+🔢 Đầu số đề: {it_dau[0]} — {round(it_dau[1]/tong*100,1)}%
+🔢 2 số cuối đề: {it_cuoi[0]} — {round(it_cuoi[1]/tong*100,1)}%
+
+⚠️ Dựa trên số thật — Tham khảo!
+""")
 
 @bot.message_handler(commands=['xoa'])
 def xoa(m):
@@ -202,7 +286,7 @@ def xoa(m):
     else:
         gui(m.chat.id, "Chưa có dữ liệu")
 
-# ✅ GÕ NGÀY 8 SỐ → TỰ ĐỘNG BÁO KẾT QUẢ
+# Gõ 8 số → xem lịch sử
 @bot.message_handler(func=lambda msg: msg.text and len(msg.text.strip()) == 8 and msg.text.strip().isdigit())
 def xem_ngay(m):
     ngay_raw = m.text.strip()
@@ -216,18 +300,18 @@ def xem_ngay(m):
 🏆 Đặc biệt: `{kq['special']}`
 🥇 Giải nhất: `{kq['g1']}`
 📌 Nguồn: {kq['source']}
-🕒 Cập nhật: {kq['updated']}""")
+🕒 Cập nhật: {kq['updated']}
+👉 Gõ /test {ngay_raw} để kiểm tra dự đoán ngày này!""")
     else:
         gui(m.chat.id, f"""⚠️ Chưa có dữ liệu {ngay_str}
-👉 Nhập: /nhap {ngay_raw} ĐB G1
-Ví dụ: /nhap {ngay_raw} 12345 67890""")
+👉 Nhập: /nhap {ngay_raw} ĐB G1""")
 
 # ====================== 🚀 CHẠY BOT ======================
 def run_bot():
     global POLLING_STARTED
     if POLLING_STARTED: return
     POLLING_STARTED = True
-    print("✅ V45.0 — Gõ ngày → tự báo kết quả")
+    print("✅ V46.0 — Có lệnh /test kiểm tra dự đoán ngày cũ")
     try: bot.remove_webhook()
     except: pass
     while True:
